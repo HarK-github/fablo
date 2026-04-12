@@ -1,0 +1,76 @@
+name: Bump version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_param:
+        description: 'Version parameter (patch, minor, major, unstable, set)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - unstable
+          - set
+      version_value:
+        description: 'Version value (only used if version_param is set, e.g. 1.2.3)'
+        required: false
+        type: string
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create semver wrapper
+        run: |
+          sudo tee /usr/local/bin/semver <<EOF
+          #!/usr/bin/env bash
+          if [ "\$1" = "next" ]; then
+            shift
+            npx semver -i "\$@"
+          else
+            npx semver "\$@"
+          fi
+          EOF
+          sudo chmod +x /usr/local/bin/semver
+
+      - name: Bump version
+        run: |
+          if [ "${{ github.event.inputs.version_param }}" = "set" ]; then
+            ./bump-version.sh set "${{ github.event.inputs.version_value }}"
+          else
+            ./bump-version.sh "${{ github.event.inputs.version_param }}"
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to $(jq -r '.version' package.json)"
+          committer: GitHub <noreply@github.com>
+          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+          branch: bump-version-to-$(jq -r '.version' package.json)
+          delete-branch: true
+          title: "chore: bump version to $(jq -r '.version' package.json)"
+          body: |
+            This is an automated version bump PR.
+            New version: $(jq -r '.version' package.json)
+            
+            Triggered by: @${{ github.actor }}
+            Parameter: ${{ github.event.inputs.version_param }} ${{ github.event.inputs.version_value }}
