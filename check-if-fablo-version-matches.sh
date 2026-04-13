@@ -5,7 +5,7 @@ set -euo
 source ./fablo.sh "help"
 
 FABLO_SCRIPT_VERSION="$FABLO_VERSION"
-FABLO_NODE_VERSION="$(jq -r .version package.json)"
+FABLO_NODE_VERSION="$(node -p "require('./package.json').version")"
 
 echo "Checking Fablo version"
 echo "    FABLO_SCRIPT_VERSION: $FABLO_SCRIPT_VERSION"

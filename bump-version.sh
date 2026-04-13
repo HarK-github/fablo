@@ -2,7 +2,7 @@
 
 set -eu
 
-old_version=$(< package.json jq -r '.version')
+old_version=$(node -p "require('./package.json').version")
 include_readme=true
 ver_arg="${1:-unstable}"
 
@@ -23,7 +23,7 @@ fi
 
 echo "Updating version from $old_version to $new_version"
 echo -n " - package.json...    "
-npm version "$new_version" --no-git-tag-version > /dev/null
+npm version "$new_version" --no-git-tag-version --ignore-scripts > /dev/null
 echo "done"
 
 echo -n " - FABLO_VERSION...   "
