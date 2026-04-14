@@ -31,7 +31,8 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          npm install -g semver
+          npm install -g semver 
+          npm install -g oclif
 
       - name: Run bump-version.sh
         run: |
