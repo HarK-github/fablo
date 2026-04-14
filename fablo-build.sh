@@ -3,8 +3,7 @@
 set -euo
 
 FABLO_HOME="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck disable=2002
-FABLO_VERSION=$(cat "$FABLO_HOME"/package.json | jq -r '.version')
+FABLO_VERSION=$(node -p "require('$FABLO_HOME/package.json').version")
 
 COMMIT_HASH=$(git rev-parse --short HEAD)
 BUILD_DATE=$(date +'%Y-%m-%d-%H:%M:%S')
