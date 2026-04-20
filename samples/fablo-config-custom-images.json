@@ -1,0 +1,39 @@
+{
+  "global": {
+    "fabricVersion": "3.0.0",
+    "fabricImages": {
+      "peer": "ghcr.io/fabric-dev/fabric-peer:3.1.0",
+      "orderer": "ghcr.io/fabric-dev/fabric-orderer:3.1.0",
+      "ca": "ghcr.io/fabric-dev/fabric-ca:latest",
+      "tools": "ghcr.io/fablo-io/fabric-tools:3.0.0"
+    }
+  },
+  "orgs": [
+    {
+      "name": "org1",
+      "domain": "example.com",
+      "peers": 2,
+      "users": 1
+    }
+  ],
+  "channels": [
+    {
+      "name": "my-channel1",
+      "orgs": ["org1"],
+      "chaincodes": [
+        {
+          "name": "chaincode1",
+          "version": "1.0",
+          "lang": "node",
+          "directory": "./chaincodes/chaincode-kv-node"
+        },
+        {
+          "name": "chaincode-go",
+          "version": "1.0",
+          "lang": "golang",
+          "directory": "./chaincodes/chaincode-kv-go"
+        }
+      ]
+    }
+  ]
+}
