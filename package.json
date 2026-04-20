@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/hyperledger-labs/fablo#readme",
   "scripts": {
+    "build:fabricx": "shx rm -rf dist && tsc && shx cp -r src/setup-docker/templates dist/src/setup-docker/",
     "clean": "rimraf dist",
     "build": "shx rm -rf dist && tsc",
     "build:dist": "npm run clean && tsc -p tsconfig-dist.json && npm run copydeps",
