@@ -1,0 +1,35 @@
+# core.yaml for Fabric-X Node: <%= node.id %>
+
+apiVersion: core.fabricx.io/v1
+kind: FabricXNode
+metadata:
+  name: <%= node.id %>
+spec:
+  nodeId: <%= node.id %>
+  type: <%= node.type %>
+  p2pPort: <%= node.p2pPort %>
+  apiPort: <%= node.apiPort %>
+  mspId: <%= mspName %>
+  channelId: <%= channelId %>
+  namespace: <%= namespace %>
+  peerListenAddress: 0.0.0.0:<%= node.p2pPort %>
+  peerExternalAddress: <%= node.id %>:<%= node.p2pPort %>
+  operationsListenAddress: 0.0.0.0:10444 # Fixed port for operations
+  metricsListenAddress: 0.0.0.0:10445 # Fixed port for metrics
+  wallets:
+    <% if (node.wallets && node.wallets.length > 0) { %>
+    <% node.wallets.forEach(function(wallet) { %>
+    - id: <%= wallet %>
+      path: /etc/hyperledger/fabricx/wallets/<%= wallet %>
+    <% }); %>
+    <% } %>
+  gossip:
+    bootstrap:
+      <% allNodes.forEach(function(n) { %>
+      - <%= n.id %>:<%= n.p2pPort %>
+      <% }); %>
+  authorities:
+    <% endorserNodes.forEach(function(n) { %>
+    - mspId: <%= n.mspName %>
+      endpoint: <%= n.id %>:<%= n.apiPort %>
+    <% }); %>

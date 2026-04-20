@@ -1,0 +1,14 @@
+# routing-config.yaml for Fabric-X
+# This file contains the routing table for all known Fabric-X nodes in the network.
+
+apiVersion: core.fabricx.io/v1
+kind: FabricXRoutingTable
+metadata:
+  name: routing-table
+spec:
+  routes:
+    <% allNodes.forEach(function(node) { %>
+    - nodeId: <%= node.id %>
+      mspId: <%= node.mspName %>
+      endpoint: <%= node.id %>:<%= node.apiPort %>
+    <% }); %>
