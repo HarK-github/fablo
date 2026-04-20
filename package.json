@@ -73,11 +73,11 @@
     "typescript": "^4.2.4"
   },
   "bin": {
-    "fablo": "./bin/run.js"
+    "fablo": "./bin/run.mjs"
   },
   "oclif": {
     "bin": "fablo",
-    "commands": "./dist/commands",
+    "commands": "./dist/src/commands",
     "dirname": "fablo",
     "topicSeparator": " "
   }
