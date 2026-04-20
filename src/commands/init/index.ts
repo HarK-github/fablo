@@ -1,4 +1,4 @@
-import { Args, Command } from '@oclif/core'
+import { Args, Command, Flags } from '@oclif/core'
 import * as chalk from "chalk";
 import { GlobalJson, FabloConfigJson, ChaincodeJson } from "../../types/FabloConfigJson";
 import * as path from 'path';
@@ -78,6 +78,15 @@ export default class Init extends Command {
       description: 'Options: node, dev, ccaas, gateway, rest (order does not matter)',
     }),
   };
+
+  static flags = {
+    fabricx: Flags.boolean({
+      description: 'Generate a Fabric-X specific configuration',
+      char: 'x',
+      required: false,
+    }),
+  };
+
 
   static strict = false;
 
@@ -202,7 +211,56 @@ export default class Init extends Command {
   }
 
   public async run(): Promise<void> {
+    const { flags } = await this.parse(Init);
 
-    await this.copySampleConfig();
+    if (flags.fabricx) {
+      await this.copyFabricXSampleConfig();
+    } else {
+      await this.copySampleConfig();
+    }
   }
-}
+
+  private async copyFabricXSampleConfig(): Promise<void> {
+    const fabloConfigJson: FabloConfigJson = {
+      $schema: `https://github.com/hyperledger-labs/fablo/releases/download/${version}/schema.json`,
+      global: {
+        platform: "fabricx",
+        fabricVersion: "2.5.0",
+        tls: true,
+        peerDevMode: false,
+      },
+      fabricx: {
+        channelId: "mychannel",
+        namespace: "token_namespace",
+        infrastructure: {
+          image: "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.7",
+          ports: { sidecar: 4001, query: 7001, orderer: 7050, database: 5433 },
+        },
+      },
+      orgs: [
+        {
+          organization: { name: "Org1", domain: "org1.example.com", mspName: "Org1MSP" },
+          ca: { prefix: "ca", db: "sqlite" },
+          orderers: [],
+          fabricx: {
+            nodes: [{ id: "endorser1", type: "endorser", apiPort: 9300, p2pPort: 9301 }],
+          },
+        },
+      ],
+      channels: [],
+      chaincodes: [],
+      hooks: {},
+    };
+
+    const rootPath = process.cwd();
+    const outputFile = path.join(rootPath, "fablo-config-fabricx.json");
+    fs.writeFileSync(outputFile, JSON.stringify(fabloConfigJson, null, 2));
+
+    this.log("===========================================================");
+    this.log(chalk.bold("Fabric-X sample config file created! :)"));
+    this.log(`File: ${outputFile}`);
+    this.log("You can start your Fabric-X network with 'fablo up' command");
+    this.log("===========================================================");
+  }
+  }
+
