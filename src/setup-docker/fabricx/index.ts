@@ -11,7 +11,7 @@ import { execSync } from "child_process";
 async function waitForServices(): Promise<void> {
   console.log("Waiting for Fabric-X services to become available...");
   const ports = [7001, 7050]; // Query and Orderer ports
-  const maxAttempts = 30; // 30 seconds timeout
+  const maxAttempts = 100; // 100 seconds timeout
   const delay = 1000; // 1 second delay
 
   for (const port of ports) {
