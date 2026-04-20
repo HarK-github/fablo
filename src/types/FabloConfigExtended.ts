@@ -1,3 +1,5 @@
+import { FabricXJson, FabricXOrgJson } from "./FabloConfigJson";
+
 export interface FabricVersions {
   fabricVersion: string;
   fabricToolsVersion: string;
@@ -53,6 +55,7 @@ export interface Global extends FabricVersions, FabricImages {
   paths: { fabloConfig: string; chaincodesBaseDir: string };
   capabilities: Capabilities;
   tools: { explorer?: ExplorerConfig };
+  platform: "fabric" | "fabricx";
 }
 
 export interface OrdererConfig {
@@ -154,6 +157,7 @@ export interface OrgConfig {
   peersCount: number;
   ordererGroups: OrdererGroup[];
   tools: { fabloRest?: FabloRestConfig; explorer?: ExplorerConfig };
+  fabricx?: FabricXOrgJson;
 }
 
 export interface peerChaincodeInstances {
@@ -205,4 +209,5 @@ export interface FabloConfigExtended {
   channels: ChannelConfig[];
   chaincodes: ChaincodeConfig[];
   hooks: HooksConfig;
+  fabricx?: FabricXJson;
 }

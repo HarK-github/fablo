@@ -6,6 +6,7 @@ export interface GlobalJson {
   engine?: "kubernetes" | "docker";
   monitoring?: { loglevel: string };
   tools?: { explorer?: boolean };
+  platform?: "fabric" | "fabricx";
 }
 
 export interface FabricImagesJson {
@@ -50,6 +51,7 @@ export interface OrgJson {
   orderers: OrdererJson[] | undefined;
   peer?: PeerJson;
   tools?: { fabloRest?: boolean; explorer?: boolean };
+  fabricx?: FabricXOrgJson;
 }
 
 export interface ChannelJson {
@@ -91,4 +93,34 @@ export interface FabloConfigJson {
   channels: ChannelJson[];
   chaincodes: ChaincodeJson[];
   hooks: HooksJson;
+  fabricx?: FabricXJson;
 }
+
+export interface FabricXNodeJson {
+  id: string;
+  type: "issuer" | "endorser";
+  apiPort: number;
+  p2pPort: number;
+  wallets?: string[];
+}
+
+export interface FabricXOrgJson {
+  nodes: FabricXNodeJson[];
+}
+
+export interface FabricXInfrastructureJson {
+  image: string;
+  ports: {
+    sidecar: number;
+    query: number;
+    orderer: number;
+    database: number;
+  };
+}
+
+export interface FabricXJson {
+  channelId: string;
+  namespace: string;
+  infrastructure: FabricXInfrastructureJson;
+}
+
