@@ -3,6 +3,7 @@
 set -e
 
 FABLO_VERSION=2.6.0
+FABLO_LOCAL="${FABLO_LOCAL:-false}"
 FABLO_IMAGE_NAME="ghcr.io/fablo-io/fablo"
 FABLO_IMAGE="$FABLO_IMAGE_NAME:$FABLO_VERSION"
 
@@ -229,6 +230,17 @@ executeOnFabloDocker() {
       --env "FABLO_CONFIG=$fablo_config"
       --env "CHAINCODES_BASE_DIR=$chaincodes_base_dir"
     )
+  fi
+
+  if [ "$FABLO_LOCAL" = "true" ]; then
+    echo "Running Fablo from local source..."
+    # Local execution needs NODE_PATH or similar if running via node directly
+    # We use npx tsx to handle the local dev.mjs
+    local fablo_root
+    fablo_root="$(cd "$(dirname "$0")" && pwd)"
+    # We ignore the workspace/mounting logic for local run for simplicity in PoC
+    node "$fablo_root/bin/run.mjs" "$command_with_params" "$fablo_config"
+    return
   fi
 
   docker run -i --rm \

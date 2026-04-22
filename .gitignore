@@ -9,3 +9,9 @@ node_modules
 samples/invalid-fablo-config.json
 .DS_Store
 dist
+changes.txt
+.gitignore
+fablo-config.json
+group
+passwd
+fablo-config-fabricx.json

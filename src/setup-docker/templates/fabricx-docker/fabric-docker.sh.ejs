@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -eu
+
+FABLO_NETWORK_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+if [ "$1" = "up" ]; then
+  echo "Starting Fabric-X network..."
+  docker compose -f "$FABLO_NETWORK_ROOT/docker-compose.xdev.yaml" up -d
+elif [ "$1" = "down" ]; then
+  echo "Stopping Fabric-X network..."
+  docker compose -f "$FABLO_NETWORK_ROOT/docker-compose.xdev.yaml" down
+elif [ "$1" = "status" ]; then
+  echo "Fabric-X Network Status:"
+  docker ps --filter name=test-committer --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+else
+  echo "Command '$1' not supported in Fabric-X PoC"
+  exit 1
+fi
