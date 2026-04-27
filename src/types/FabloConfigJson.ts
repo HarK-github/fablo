@@ -6,7 +6,6 @@ export interface GlobalJson {
   engine?: "kubernetes" | "docker";
   monitoring?: { loglevel: string };
   tools?: { explorer?: boolean };
-  platform?: "fabric" | "fabricx";
 }
 
 export interface FabricImagesJson {
@@ -123,4 +122,3 @@ export interface FabricXJson {
   namespace: string;
   infrastructure: FabricXInfrastructureJson;
 }
-

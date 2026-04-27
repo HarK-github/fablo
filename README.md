@@ -15,6 +15,11 @@ Fablo supports:
 
 Visit [SUPPORTED_FEATURES.md](SUPPORTED_FEATURES.md) to see the full list of features supported by Fablo.
 
+## Fabric-X (experimental)
+
+Fabric-X support is implemented as a separate engine selected by `$schema` (no `platform` field).
+See `FABRICX.md` for usage and configuration.
+
 ## See it in action
 
 [&gt;&gt;&gt; Watch the demo &lt;&lt;&lt;](https://www.youtube.com/watch?v=5yn3_g6Cybw)

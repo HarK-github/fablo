@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fablo.io/schemas/fabricx-schema-v1.json",
+  "type": "object",
+  "required": ["$schema", "global", "fabricx"],
+  "properties": {
+    "$schema": { "type": "string", "const": "https://fablo.io/schemas/fabricx-schema-v1.json" },
+    "global": {
+      "type": "object",
+      "required": ["fabricVersion"],
+      "properties": {
+        "fabricVersion": { "type": "string" },
+        "tls": { "type": "boolean" }
+      }
+    },
+    "fabricx": {
+      "type": "object",
+      "required": ["channelId", "namespace", "infrastructure", "nodes"],
+      "properties": {
+        "channelId": { "type": "string" },
+        "namespace": { "type": "string" },
+        "infrastructure": {
+          "type": "object",
+          "required": ["image"],
+          "properties": {
+            "image": { "type": "string" },
+            "ports": {
+              "type": "object",
+              "properties": {
+                "sidecar": { "type": "integer" },
+                "query": { "type": "integer" },
+                "orderer": { "type": "integer" },
+                "database": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "apiPort", "p2pPort"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "enum": ["issuer", "endorser", "owner"] },
+              "apiPort": { "type": "integer" },
+              "p2pPort": { "type": "integer" },
+              "wallets": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

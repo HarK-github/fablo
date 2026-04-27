@@ -221,13 +221,11 @@ export default class Init extends Command {
   }
 
   private async copyFabricXSampleConfig(): Promise<void> {
-    const fabloConfigJson: FabloConfigJson = {
-      $schema: `https://github.com/hyperledger-labs/fablo/releases/download/${version}/schema.json`,
+    const fabloConfigJson = {
+      $schema: "https://fablo.io/schemas/fabricx-schema-v1.json",
       global: {
-        platform: "fabricx",
         fabricVersion: "2.5.0",
         tls: true,
-        peerDevMode: false,
       },
       fabricx: {
         channelId: "mychannel",
@@ -236,20 +234,12 @@ export default class Init extends Command {
           image: "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.7",
           ports: { sidecar: 4001, query: 7001, orderer: 7050, database: 5433 },
         },
+        nodes: [
+          { id: "issuer1", type: "issuer", apiPort: 9200, p2pPort: 9201, wallets: ["issuer-wallet"] },
+          { id: "endorser1", type: "endorser", apiPort: 9300, p2pPort: 9301, wallets: ["endorser-wallet"] },
+          { id: "owner1", type: "owner", apiPort: 9400, p2pPort: 9401, wallets: ["owner-wallet"] },
+        ],
       },
-      orgs: [
-        {
-          organization: { name: "Org1", domain: "org1.example.com", mspName: "Org1MSP" },
-          ca: { prefix: "ca", db: "sqlite" },
-          orderers: [],
-          fabricx: {
-            nodes: [{ id: "endorser1", type: "endorser", apiPort: 9300, p2pPort: 9301 }],
-          },
-        },
-      ],
-      channels: [],
-      chaincodes: [],
-      hooks: {},
     };
 
     const rootPath = process.cwd();
@@ -263,4 +253,3 @@ export default class Init extends Command {
     this.log("===========================================================");
   }
   }
-

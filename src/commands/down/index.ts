@@ -1,9 +1,17 @@
 import { Args, Command } from "@oclif/core";
 import parseFabloConfig from "../../utils/parseFabloConfig";
-import extendConfig from "../../extend-config/extendConfig";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import { getEngine } from "../../engines/engine-loader";
+
+const FABRICX_SCHEMA_SUFFIX = "fabricx-schema-v1.json";
+
+function resolveDefaultTargetDir(config: any): string {
+  if (config?.$schema?.endsWith(FABRICX_SCHEMA_SUFFIX)) {
+    return path.join(process.cwd(), "fablo-target", "fabricx");
+  }
+  return path.join(process.cwd(), "fablo-target");
+}
 
 export default class Down extends Command {
   static override description = "Tear down Fablo network";
@@ -13,6 +21,10 @@ export default class Down extends Command {
       description: "Fablo config file path",
       required: false,
       default: "fablo-config.json",
+    }),
+    targetDir: Args.string({
+      description: "Target directory with generated files",
+      required: false,
     }),
   };
 
@@ -27,28 +39,18 @@ export default class Down extends Command {
       }
 
       const configContent = fs.readFileSync(fabloConfigPath, "utf-8");
-      const json = parseFabloConfig(configContent);
-      const config = extendConfig(json);
+      const config = parseFabloConfig(configContent);
+      const engine = getEngine(config);
 
-      if (config.global.platform === "fabricx") {
-        this.log("Bringing down Fabric-X network...");
-        try {
-          execSync(
-            "docker compose -f fablo-target/docker-compose.xdev.yaml down",
-            {
-              stdio: "inherit",
-            },
-          );
-          this.log("✅ Fabric-X network brought down successfully.");
-        } catch (e) {
-          this.error(`Failed to bring down Fabric-X network: ${(e as Error).message}`);
-        }
-        return;
-      }
+      const defaultTargetDir = resolveDefaultTargetDir(config);
+      const targetDirArg = args.targetDir;
+      const targetDir = targetDirArg
+        ? path.isAbsolute(targetDirArg)
+          ? targetDirArg
+          : path.join(process.cwd(), targetDirArg)
+        : defaultTargetDir;
 
-      // Default (classic Fabric) down is handled by fabric-docker.sh via fablo.sh,
-      // but if called directly via CLI, we could implement it here too.
-      this.log("Classic Fabric network should be brought down via './fablo.sh down'");
+      await engine.down(targetDir);
     } catch (error) {
       this.error(`Error bringing down network: ${(error as Error).message}`);
     }

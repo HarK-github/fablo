@@ -55,7 +55,6 @@ export interface Global extends FabricVersions, FabricImages {
   paths: { fabloConfig: string; chaincodesBaseDir: string };
   capabilities: Capabilities;
   tools: { explorer?: ExplorerConfig };
-  platform: "fabric" | "fabricx";
 }
 
 export interface OrdererConfig {

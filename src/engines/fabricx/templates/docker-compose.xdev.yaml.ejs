@@ -1,0 +1,26 @@
+services:
+  committer:
+    image: <%= image %>
+    container_name: <%= containerName %>
+    networks:
+      - <%= networkName %>
+    environment:
+      - SC_SIDECAR_ORDERER_IDENTITY_MSP_DIR=/root/config/crypto/<%= ordererIdentityMspDir %>
+      - SC_SIDECAR_ORDERER_IDENTITY_MSP_ID=<%= ordererIdentityMspId %>
+      - SC_SIDECAR_ORDERER_CHANNEL_ID=<%= channelId %>
+      - SC_SIDECAR_ORDERER_SIGNED_ENVELOPES=true
+      - SC_QUERY_SERVICE_SERVER_ENDPOINT=:<%= ports.query %>
+      - SC_ORDERER_BLOCK_SIZE=1
+    ports:
+      - "<%= ports.sidecar %>:<%= ports.sidecar %>"
+      - "<%= ports.query %>:<%= ports.query %>"
+      - "<%= ports.orderer %>:<%= ports.orderer %>"
+      - "<%= ports.database %>:<%= ports.database %>"
+    volumes:
+      - ./crypto:/root/config/crypto
+    command: run db orderer committer
+
+networks:
+  <%= networkName %>:
+    name: <%= networkName %>
+    external: false

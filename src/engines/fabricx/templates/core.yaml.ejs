@@ -1,0 +1,50 @@
+logging:
+  spec: info
+  format: "%{color}%{time:15:04:05.000} [%{module}] %{shortfunc} %{level:.4s}%{color:reset} %{message}"
+
+fsc:
+  id: <%= node.id %>
+  p2p:
+    listenAddress: /ip4/0.0.0.0/tcp/<%= node.p2pPort %>
+    type: websocket
+    opts:
+      routing:
+        path: ../routing-config.yaml
+  persistences:
+    default:
+      type: sqlite
+      opts:
+        dataSource: file:./data/fts.sqlite
+  endpoint:
+    resolvers:
+      <% nodes.forEach(function(n) { %>
+      - name: <%= n.id %>
+        identity:
+          id: <%= n.id %>
+          path: ./keys/nodes/<%= n.id %>.crt
+        addresses:
+          P2P: <%= n.id %>:<%= n.p2pPort %>
+      <% }); %>
+
+fabric:
+  enabled: true
+  default:
+    driver: fabricx
+    tls:
+      enabled: false
+    peers:
+      - address: localhost:<%= ports.sidecar %>
+    queryService:
+      - address: localhost:<%= ports.query %>
+    channels:
+      - name: <%= channelId %>
+        default: true
+
+token:
+  enabled: true
+  tms:
+    mytms:
+      network: default
+      channel: <%= channelId %>
+      namespace: <%= namespace %>
+      driver: zkatdlog

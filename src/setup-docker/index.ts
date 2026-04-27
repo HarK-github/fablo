@@ -23,7 +23,6 @@ import { createExplorerConfig } from "../types/ExplorerConfig";
 import * as fs from "fs-extra";
 import * as path from "path";
 import { renderTemplate, getTemplatePath, getDestinationPath } from "../utils/templateUtils";
-import { setupDockerFabricX } from "./fabricx";
 
 export default class SetupDocker extends Command {
   static override description = "Setup Docker network files from Fablo config";
@@ -58,11 +57,6 @@ export default class SetupDocker extends Command {
     const configContent = await fs.readFile(fabloConfigPath, "utf-8");
     const json = parseFabloConfig(configContent);
     const configExtended = extendConfig(json);
-
-    if (configExtended.global.platform === "fabricx") {
-      await setupDockerFabricX(configExtended);
-      return;
-    }
 
     const { global, orgs, chaincodes, channels } = configExtended;
 
@@ -301,4 +295,3 @@ export default class SetupDocker extends Command {
     }
   }
 }
-

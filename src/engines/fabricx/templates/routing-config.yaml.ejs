@@ -1,0 +1,12 @@
+# routing-config.yaml for Fabric-X
+
+apiVersion: core.fabricx.io/v1
+kind: FabricXRoutingTable
+metadata:
+  name: routing-table
+spec:
+  routes:
+    <% nodes.forEach(function(n) { %>
+    - nodeId: <%= n.id %>
+      endpoint: <%= n.id %>:<%= n.apiPort %>
+    <% }); %>

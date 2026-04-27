@@ -1,9 +1,17 @@
 import { Args, Command } from "@oclif/core";
 import parseFabloConfig from "../../utils/parseFabloConfig";
-import extendConfig from "../../extend-config/extendConfig";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import { getEngine } from "../../engines/engine-loader";
+
+const FABRICX_SCHEMA_SUFFIX = "fabricx-schema-v1.json";
+
+function resolveDefaultTargetDir(config: any): string {
+  if (config?.$schema?.endsWith(FABRICX_SCHEMA_SUFFIX)) {
+    return path.join(process.cwd(), "fablo-target", "fabricx");
+  }
+  return path.join(process.cwd(), "fablo-target");
+}
 
 export default class Status extends Command {
   static override description = "Show network status";
@@ -13,6 +21,10 @@ export default class Status extends Command {
       description: "Fablo config file path",
       required: false,
       default: "fablo-config.json",
+    }),
+    targetDir: Args.string({
+      description: "Target directory with generated files",
+      required: false,
     }),
   };
 
@@ -27,43 +39,19 @@ export default class Status extends Command {
       }
 
       const configContent = fs.readFileSync(fabloConfigPath, "utf-8");
-      const json = parseFabloConfig(configContent);
-      const config = extendConfig(json);
+      const config = parseFabloConfig(configContent);
+      const engine = getEngine(config);
 
-      if (config.global.platform === "fabricx") {
-        this.log("Fabric-X Network Status:");
-        try {
-          execSync(
-            "docker ps --filter name=test-committer --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'",
-            {
-              stdio: "inherit",
-            },
-          );
-        } catch (e) {
-          this.error("Failed to get Docker status.");
-        }
+      const defaultTargetDir = resolveDefaultTargetDir(config);
+      const targetDirArg = args.targetDir;
+      const targetDir = targetDirArg
+        ? path.isAbsolute(targetDirArg)
+          ? targetDirArg
+          : path.join(process.cwd(), targetDirArg)
+        : defaultTargetDir;
 
-        // Bonus: Check if services are healthy
-        this.log("\nService Health:");
-          const checkService = (port: number, serviceName: string) => {
-            try {
-              execSync(`nc -zv localhost ${port}`, { stdio: "ignore", timeout: 2000 });
-              this.log(`✅ ${serviceName} (${port})`);
-            } catch (e) {
-              this.log(`❌ ${serviceName} (${port})`);
-            }
-          };
-
-          checkService(7050, "Orderer");
-          checkService(7001, "Query Service");
-          checkService(4001, "Sidecar");
-        return;
-      }
-
-      // Default (classic Fabric) status is handled by fabric-docker.sh via fablo.sh,
-      // but if called directly via CLI, we could implement it here too.
-      // For now, we only implement the Fabric-X branch as requested.
-      this.log("Classic Fabric status should be viewed via './fablo.sh status'");
+      const statusText = await engine.status(targetDir);
+      this.log(statusText);
     } catch (error) {
       this.error(`Error getting status: ${(error as Error).message}`);
     }

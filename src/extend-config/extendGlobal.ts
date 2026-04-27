@@ -108,8 +108,6 @@ const extendGlobal = (globalJson: GlobalJson): Global => {
     chaincodesBaseDir: ".",
   };
 
-  const platform = globalJson.platform || "fabric";
-
   return {
     ...globalJsonRest,
     ...versions,
@@ -119,7 +117,6 @@ const extendGlobal = (globalJson: GlobalJson): Global => {
     monitoring,
     capabilities: getNetworkCapabilities(globalJson.fabricVersion),
     tools: { ...explorer },
-    platform,
   };
 };
 
