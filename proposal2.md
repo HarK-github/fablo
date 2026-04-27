@@ -1,8 +1,12 @@
+<div align="center">
+
 # Fablo + Hyperledger Fabric‑X Integration
 ## Engine Architecture - Proposal and Proof of Concept
 
 **By Harshit Kandpal (`@HarK-github`)**  
 **IIT Bhilai, B.Tech CSE**
+
+</div>
 
 ## Overview
 
@@ -12,13 +16,13 @@ This document describes every architectural decision I made, why I made it, how 
 
 ## How I Approached the Problem
 
-Before writing a single line of code, I spent time understanding both codebases at the architectural level.
+Before writing the  code, I spent time understanding both codebases at the architectural level.
 
 For **Fablo**, I traced the full generation pipeline: how a `fablo-config.json` is parsed, extended with defaults, validated, and then handed to `setupDocker()` which renders EJS templates into Docker Compose files and shell scripts. I noted that the entire pipeline assumes classic Hyperledger Fabric concepts: peers, orderers, certificate authorities, chaincode lifecycle, configtx. There is no seam for a different network type.
 
 For **Fabric‑X**, I studied the token sample end‑to‑end: the `xdev` bundled topology, FSC‑based application nodes, `core.yaml` configuration, routing tables, the Arma orderer, validator‑committer, sidecar, and query service. Fabric‑X is not a new version of Fabric: it is a fundamentally different decomposed microservices architecture with a different deployment model, different config files, and a different runtime lifecycle.
 
-The core insight from this research was: **these two systems share almost nothing at the generator level**. Trying to fit Fabric‑X into Fablo's existing generator by adding branches would create an unmaintainable tangle. What was needed was a clean boundary: an engine interface, so that classic Fabric and Fabric‑X could each own their generation and lifecycle logic independently.
+As mentioned in the project statement, these two systems share almost nothing at the generator level.
 
 ## Evaluating the Architectural Options
 
@@ -35,7 +39,6 @@ However, I went one step further than a simple `if/else` branch inside `setupDoc
 ## The Key Architectural Decision: Schema‑First Engine Detection
 
 The most important single decision I made was **how to detect which engine to use**.
-
 My original proof of concept used `global.platform: "fabricx"` in the config. After reflection, I replaced this with `$schema` based detection. Here is why.
 
 A `platform` field is an ad hoc convention. It has no validation semantics, no versioning, and no tooling support. It is also a leaky abstraction: it forces the `FabloConfigJson` type to know about Fabric‑X, coupling the classic type system to a new engine.
@@ -59,10 +62,10 @@ flowchart TD
   A[Load config JSON/YAML] --> B{config.$schema endsWith<br/>fabricx-schema-v1.json?}
   B -->|Yes| C[FabricXEngine]
   B -->|No| D[ClassicFabricEngine]
-  C --> E[generate(): write files only]
-  C --> F[up(): docker compose only]
-  D --> G[generate(): delegate to existing setup-network]
-  D --> H[up/down/status: delegate to existing scripts]
+  C --> E["generate(): write files only"]
+  C --> F["up(): docker compose only"]
+  D --> G["generate(): delegate to existing setup-network"]
+  D --> H["up/down/status: delegate to existing scripts"]
 ```
 
 ## Repository Structure After the Refactor
@@ -251,17 +254,6 @@ When `--fabricx` is passed, `fablo init` generates `fablo-config-fabricx.json` w
 
 Classic `fablo init` (no flag) is completely unchanged and produces `fablo-config.json` for classic Fabric.
 
-## Bug Fixed During Development
-
-### Docker Volume Mount Conflict
-
-During testing of `fablo up`, Docker threw the error:
-
-> *"Are you trying to mount a directory onto a file (or vice-versa)?"*
-
-The root cause was that `docker-compose.xdev.yaml.ejs` mounted both the `./crypto` directory and `sc-genesis-block.proto.bin` explicitly as separate volume entries. Docker interpreted the explicit file mount as conflicting with the directory mount that already included the same file.
-
-The fix was to remove the redundant explicit file mount. The genesis block file is correctly included in the container via the parent directory mount `./crypto:/root/config/crypto`. This resolved the issue completely.
 
 ## Known Limitations (Explicit MVP Tradeoffs)
 
@@ -298,6 +290,12 @@ All of these limitations are isolated inside `src/engines/fabricx/`. They cannot
 6. `npx fablo status ...` → assert output contains the container name and port
 7. `npx fablo down ...` → assert container is gone
 8. Cleanup temp workspace
+
+## Demonstration
+
+| Test Execution | Running Demo |
+|:---:|:---:|
+| ![test_screenshot](image.png) | ![running_demo](image-1.png) |
 
 ## Running the Demo
 
