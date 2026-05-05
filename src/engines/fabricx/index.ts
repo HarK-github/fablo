@@ -49,12 +49,13 @@ function formatAjvErrors(errors: unknown): string[] {
 }
 
 async function waitForTcpPort(host: string, port: number, timeoutMs: number): Promise<void> {
+  const POLL_INTERVAL_MS = 1000;
   const start = Date.now();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const reachable = await new Promise<boolean>((resolve) => {
       const socket = new net.Socket();
-      socket.setTimeout(1000);
+      socket.setTimeout(POLL_INTERVAL_MS);
       socket.once("connect", () => {
         socket.destroy();
         resolve(true);
@@ -72,7 +73,7 @@ async function waitForTcpPort(host: string, port: number, timeoutMs: number): Pr
     if (Date.now() - start > timeoutMs) {
       throw new Error(`Port ${host}:${port} did not become ready within ${Math.ceil(timeoutMs / 1000)}s.`);
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
 }
 
@@ -114,26 +115,22 @@ export class FabricXEngine implements FabloEngine {
       throw new Error(`Fabric-X config validation failed:\n- ${validation.errors.join("\n- ")}`);
     }
 
+    const DEFAULT_PORTS: FabricXPorts = {
+      sidecar: 4001,
+      query: 7001,
+      orderer: 7050,
+      database: 5433,
+    };
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const templatesDir = path.join(__dirname, "templates");
 
     const portsPartial = config.fabricx.infrastructure.ports ?? {};
     const ports: FabricXPorts = {
-      sidecar: portsPartial.sidecar as number,
-      query: portsPartial.query as number,
-      orderer: portsPartial.orderer as number,
-      database: portsPartial.database as number,
+      sidecar: portsPartial.sidecar ?? DEFAULT_PORTS.sidecar,
+      query: portsPartial.query ?? DEFAULT_PORTS.query,
+      orderer: portsPartial.orderer ?? DEFAULT_PORTS.orderer,
+      database: portsPartial.database ?? DEFAULT_PORTS.database,
     };
-
-    const missingPorts = (Object.entries(ports) as Array<[keyof FabricXPorts, number]>)
-      .filter(([, value]) => typeof value !== "number" || Number.isNaN(value))
-      .map(([key]) => key);
-    if (missingPorts.length > 0) {
-      throw new Error(
-        `Fabric-X config missing required infrastructure ports: ${missingPorts.join(", ")}. ` +
-          "Set fabricx.infrastructure.ports.{sidecar,query,orderer,database}.",
-      );
-    }
 
     await fs.ensureDir(effectiveTargetDir);
     await fs.ensureDir(path.join(effectiveTargetDir, "conf"));
@@ -148,6 +145,11 @@ export class FabricXEngine implements FabloEngine {
       await fs.copy(cryptoSourceDir, cryptoTargetDir, { overwrite: true });
     } else {
       await fs.ensureDir(cryptoTargetDir);
+      console.warn(
+        "[fablo] WARNING: No crypto material found. Set FABLO_FABRICX_CRYPTO_SOURCE to a valid directory.\n" +
+          "The network will start but cannot process transactions without certificates.\n" +
+          "Checked: FABLO_FABRICX_CRYPTO_SOURCE env var, and default relative paths.",
+      );
     }
 
     const dockerComposeTemplate = path.join(templatesDir, "docker-compose.xdev.yaml.ejs");
@@ -179,6 +181,7 @@ export class FabricXEngine implements FabloEngine {
         channelId: config.fabricx.channelId,
         namespace: config.fabricx.namespace,
         ports,
+        tls: config.global.tls ?? false,
       });
     }
   }
@@ -186,16 +189,12 @@ export class FabricXEngine implements FabloEngine {
   async up(targetDir?: string): Promise<void> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
-    if (!(await fs.pathExists(composeFile))) {
-      throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
+    const statePath = path.join(effectiveTargetDir, "fabricx-engine-state.json");
+    if (!(await fs.pathExists(composeFile)) || !(await fs.pathExists(statePath))) {
+      throw new Error("Run 'fablo generate <config> <targetDir>' first.");
     }
 
     execSync(`docker compose -f ${composeFile} up -d`, { stdio: "inherit" });
-
-    const statePath = path.join(effectiveTargetDir, "fabricx-engine-state.json");
-    if (!(await fs.pathExists(statePath))) {
-      throw new Error(`Missing ${statePath}. Run 'fablo generate' first.`);
-    }
     const state = (await fs.readJSON(statePath)) as FabricXEngineState;
 
     await waitForTcpPort("127.0.0.1", state.ports.orderer, 60_000);
@@ -205,12 +204,18 @@ export class FabricXEngine implements FabloEngine {
   async down(targetDir?: string): Promise<void> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
+    if (!(await fs.pathExists(composeFile))) {
+      throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
+    }
     execSync(`docker compose -f ${composeFile} down`, { stdio: "inherit" });
   }
 
   async status(targetDir?: string): Promise<string> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
+    if (!(await fs.pathExists(composeFile))) {
+      throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
+    }
     const output = execSync(`docker compose -f ${composeFile} ps`, { stdio: "pipe" }).toString("utf-8");
     return output.trimEnd();
   }

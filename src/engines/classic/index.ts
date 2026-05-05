@@ -10,15 +10,21 @@ function resolveTargetDir(targetDir?: string): string {
 }
 
 function resolveBinRunPath(): string {
-  const candidates = [
-    path.resolve(__dirname, "../../../../bin/run.mjs"), // when executed from dist/src/engines/classic
-    path.resolve(__dirname, "../../../bin/run.mjs"), // when executed from src/engines/classic
-  ];
-  const found = candidates.find((p) => fs.existsSync(p));
-  if (!found) {
-    throw new Error(`Cannot locate bin/run.mjs. Tried:\n- ${candidates.join("\n- ")}`);
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, "bin", "run.mjs");
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
   }
-  return found;
+
+  throw new Error(`Cannot locate bin/run.mjs. Started search from: ${__dirname}`);
 }
 
 function formatJsonSchemaErrors(errors: unknown): string[] {

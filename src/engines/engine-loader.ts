@@ -1,11 +1,14 @@
 import { FabloEngine } from "./engine";
 import { FabricXEngine } from "./fabricx";
 import { ClassicFabricEngine } from "./classic";
-
-const FABRICX_SCHEMA_SUFFIX = "fabricx-schema-v1.json";
+import { FABRICX_SCHEMA_SUFFIX } from "../utils/resolveTargetDir";
 
 export function getEngine(config: any): FabloEngine {
-  if (config?.$schema?.endsWith(FABRICX_SCHEMA_SUFFIX)) {
+  if (config === null || typeof config !== "object") {
+    throw new Error("Invalid config: expected a JSON object.");
+  }
+
+  if (typeof config.$schema === "string" && config.$schema.endsWith(FABRICX_SCHEMA_SUFFIX)) {
     return new FabricXEngine();
   }
   return new ClassicFabricEngine();

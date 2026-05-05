@@ -3,15 +3,7 @@ import parseFabloConfig from "../../utils/parseFabloConfig";
 import * as fs from "fs";
 import * as path from "path";
 import { getEngine } from "../../engines/engine-loader";
-
-const FABRICX_SCHEMA_SUFFIX = "fabricx-schema-v1.json";
-
-function resolveDefaultTargetDir(config: any): string {
-  if (config?.$schema?.endsWith(FABRICX_SCHEMA_SUFFIX)) {
-    return path.join(process.cwd(), "fablo-target", "fabricx");
-  }
-  return path.join(process.cwd(), "fablo-target");
-}
+import { resolveDefaultTargetDir } from "../../utils/resolveTargetDir";
 
 export default class Down extends Command {
   static override description = "Tear down Fablo network";

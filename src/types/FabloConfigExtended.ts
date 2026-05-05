@@ -1,4 +1,4 @@
-import { FabricXJson, FabricXOrgJson } from "./FabloConfigJson";
+import { FabricXJson, FabricXOrgJson } from "./FabricXConfigJson";
 
 export interface FabricVersions {
   fabricVersion: string;

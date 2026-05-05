@@ -224,8 +224,8 @@ export default class Init extends Command {
     const fabloConfigJson = {
       $schema: "https://fablo.io/schemas/fabricx-schema-v1.json",
       global: {
-        fabricVersion: "2.5.0",
-        tls: true,
+        fabricVersion: "x",
+        tls: false,
       },
       fabricx: {
         channelId: "mychannel",
@@ -250,6 +250,15 @@ export default class Init extends Command {
     this.log(chalk.bold("Fabric-X sample config file created! :)"));
     this.log(`File: ${outputFile}`);
     this.log("You can start your Fabric-X network with 'fablo up' command");
+    this.log("Note: fabricVersion is unused in Fabric-X configs. Image version is set in infrastructure.image.");
+    this.log("");
+    this.log("Environment variable overrides:");
+    this.log("  FABLO_FABRICX_CRYPTO_SOURCE      - path to pre-generated crypto material");
+    this.log("  FABLO_FABRICX_ORDERER_MSP_ID     - orderer MSP ID (default: Org1MSP)");
+    this.log(
+      "  FABLO_FABRICX_ORDERER_MSP_DIR_REL - orderer MSP dir relative to crypto/ " +
+        "(default: peerOrganizations/...)",
+    );
     this.log("===========================================================");
   }
-  }
+}

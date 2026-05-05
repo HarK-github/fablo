@@ -30,6 +30,16 @@ test -f "$TARGET_DIR/conf/issuer1/core.yaml"
 test -f "$TARGET_DIR/conf/endorser1/core.yaml"
 test -f "$TARGET_DIR/conf/owner1/core.yaml"
 
+echo "== Verify Generated Content =="
+grep -q 'mychannel' "$TARGET_DIR/docker-compose.xdev.yaml"
+grep -q 'mychannel' "$TARGET_DIR/conf/routing-config.yaml"
+grep -q 'issuer1' "$TARGET_DIR/conf/issuer1/core.yaml"
+grep -q 'endorser1' "$TARGET_DIR/conf/endorser1/core.yaml"
+grep -q 'owner1' "$TARGET_DIR/conf/owner1/core.yaml"
+grep -q '7050' "$TARGET_DIR/docker-compose.xdev.yaml"
+grep -q '7001' "$TARGET_DIR/docker-compose.xdev.yaml"
+echo "✓ Generated file content verified"
+
 echo "== Up =="
 FABLO_LOCAL=true npx fablo up "$CONFIG_FILE" "$TARGET_DIR"
 
@@ -55,19 +65,18 @@ wait_for_port 7050 "Orderer"
 wait_for_port 7001 "Query"
 
 echo "== Containers =="
-docker ps --filter name=committer --format '{{.Names}}' | rg -q '^committer$'
+docker ps --filter name=committer --filter status=running --format '{{.Names}}' | grep -q '^committer$'
 
 echo "== Status =="
-npx fablo status "$CONFIG_FILE" "$TARGET_DIR" | rg -q 'committer'
+npx fablo status "$CONFIG_FILE" "$TARGET_DIR" | grep -q 'committer'
 
 echo "== Down =="
 npx fablo down "$CONFIG_FILE" "$TARGET_DIR"
 
 echo "== Verify Down =="
-if docker ps --filter name=committer --format '{{.Names}}' | rg -q '^committer$'; then
+if docker ps --filter name=committer --format '{{.Names}}' | grep -q '^committer$'; then
   echo "✗ committer container still running"
   exit 1
 fi
 
 echo "✅ Fabric-X e2e test passed"
-

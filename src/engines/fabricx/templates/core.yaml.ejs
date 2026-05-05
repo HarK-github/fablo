@@ -31,7 +31,7 @@ fabric:
   default:
     driver: fabricx
     tls:
-      enabled: false
+      enabled: <%= tls %>
     peers:
       - address: localhost:<%= ports.sidecar %>
     queryService:
