@@ -1,0 +1,31 @@
+---
+OrdererOrgs:
+  - Name: OrdererOrg
+    Domain: example.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+        SANS:
+          - localhost
+          - 127.0.0.1
+          - host.docker.internal
+          - orderer.example.com
+
+PeerOrgs:
+<% organizations.forEach(function (organization) { %>
+  - Name: <%= organization.name %>
+    Domain: <%= organization.domain %>
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: <%= organization.peerName %>
+        SANS:
+          - localhost
+          - 127.0.0.1
+          - host.docker.internal
+          - <%= organization.peerName %>.<%= organization.domain %>
+    Users:
+      Count: 1
+      Specs:
+        - Name: <%= organization.adminUser %>
+          HSM: false
+<% }) %>

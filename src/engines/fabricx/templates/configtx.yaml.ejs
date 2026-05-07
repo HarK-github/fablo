@@ -1,0 +1,126 @@
+---
+Organizations:
+<% organizations.forEach(function (organization) { %>
+  - &<%= organization.mspId %>
+    Name: <%= organization.name %>
+    ID: <%= organization.mspId %>
+    MSPDir: ./crypto/peerOrganizations/<%= organization.domain %>/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: OR('<%= organization.mspId %>.member')
+      Writers:
+        Type: Signature
+        Rule: OR('<%= organization.mspId %>.member')
+      Endorsement:
+        Type: Signature
+        Rule: OR('<%= organization.mspId %>.member')
+      Admins:
+        Type: Signature
+        Rule: OR('<%= organization.mspId %>.admin')
+    AnchorPeers:
+      - Host: 127.0.0.1
+        Port: <%= ports.sidecar %>
+<% }) %>
+  - &OrdererMSP
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: ./crypto/ordererOrganizations/example.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: OR('OrdererMSP.member')
+      Writers:
+        Type: Signature
+        Rule: OR('OrdererMSP.member')
+      Admins:
+        Type: Signature
+        Rule: OR('OrdererMSP.admin')
+    OrdererEndpoints:
+      - id=0,broadcast,deliver,localhost:<%= ports.orderer %>
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V3_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_5: true
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: ANY Readers
+    Writers:
+      Type: ImplicitMeta
+      Rule: ANY Writers
+    Admins:
+      Type: ImplicitMeta
+      Rule: MAJORITY Admins
+  Capabilities: *ChannelCapabilities
+
+Application: &ApplicationDefaults
+  Organizations:
+<% organizations.forEach(function (organization) { %>
+    - *<%= organization.mspId %>
+<% }) %>
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: ANY Readers
+    Writers:
+      Type: ImplicitMeta
+      Rule: ANY Writers
+    Admins:
+      Type: ImplicitMeta
+      Rule: ANY Admins
+    LifecycleEndorsement:
+      Type: Signature
+      Rule: <%- namespacePolicy %>
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: ANY Endorsement
+  Capabilities: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  OrdererType: etcdraft
+  BatchTimeout: 1s
+  BatchSize:
+    MaxMessageCount: 500
+    AbsoluteMaxBytes: 98 MB
+    PreferredMaxBytes: 2 KB
+  Capabilities: *OrdererCapabilities
+  EtcdRaft:
+    Options:
+      TickInterval: 500ms
+      SnapshotIntervalSize: 1 KB
+    Consenters:
+      - Host: 127.0.0.1
+        Port: <%= ports.orderer %>
+        ClientTLSCert: ./crypto/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+        ServerTLSCert: ./crypto/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+  Organizations:
+    - *OrdererMSP
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: ANY Readers
+    Writers:
+      Type: ImplicitMeta
+      Rule: ANY Writers
+    Admins:
+      Type: ImplicitMeta
+      Rule: MAJORITY Admins
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: ANY Writers
+
+Profiles:
+  <%= profileName %>:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      <<: *ApplicationDefaults
+    Consortium: SampleConsortium

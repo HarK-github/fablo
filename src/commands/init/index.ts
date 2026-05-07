@@ -228,16 +228,24 @@ export default class Init extends Command {
         tls: false,
       },
       fabricx: {
-        channelId: "mychannel",
+        channel: {
+          name: "mychannel",
+          policy: "AND('Org1MSP.member')",
+        },
         namespace: "token_namespace",
         infrastructure: {
-          image: "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.7",
+          image: "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.9",
+          toolsImage: "ghcr.io/hyperledger/fabric-x-tools:latest",
           ports: { sidecar: 4001, query: 7001, orderer: 7050, database: 5433 },
         },
-        nodes: [
-          { id: "issuer1", type: "issuer", apiPort: 9200, p2pPort: 9201, wallets: ["issuer-wallet"] },
-          { id: "endorser1", type: "endorser", apiPort: 9300, p2pPort: 9301, wallets: ["endorser-wallet"] },
-          { id: "owner1", type: "owner", apiPort: 9400, p2pPort: 9401, wallets: ["owner-wallet"] },
+        organizations: [
+          {
+            name: "Org1",
+            mspId: "Org1MSP",
+            domain: "org1.example.com",
+            peerName: "SC",
+            adminUser: "channel_admin",
+          },
         ],
       },
     };
@@ -249,16 +257,8 @@ export default class Init extends Command {
     this.log("===========================================================");
     this.log(chalk.bold("Fabric-X sample config file created! :)"));
     this.log(`File: ${outputFile}`);
-    this.log("You can start your Fabric-X network with 'fablo up' command");
-    this.log("Note: fabricVersion is unused in Fabric-X configs. Image version is set in infrastructure.image.");
-    this.log("");
-    this.log("Environment variable overrides:");
-    this.log("  FABLO_FABRICX_CRYPTO_SOURCE      - path to pre-generated crypto material");
-    this.log("  FABLO_FABRICX_ORDERER_MSP_ID     - orderer MSP ID (default: Org1MSP)");
-    this.log(
-      "  FABLO_FABRICX_ORDERER_MSP_DIR_REL - orderer MSP dir relative to crypto/ " +
-        "(default: peerOrganizations/...)",
-    );
+    this.log("Run 'fablo generate fablo-config-fabricx.json fablo-target/fabricx' and then 'fablo up fablo-config-fabricx.json fablo-target/fabricx'.");
+    this.log("This sample uses the FSC-aligned Fabric-X test-node flow with Dockerized crypto generation.");
     this.log("===========================================================");
   }
 }

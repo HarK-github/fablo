@@ -1,9 +1,16 @@
-import Ajv = require("ajv");
 import * as fs from "fs-extra";
-import * as net from "net";
+import * as os from "os";
 import * as path from "path";
-import { execSync } from "child_process";
+import { Validator as SchemaValidator } from "jsonschema";
 import { renderTemplate } from "../../utils/templateUtils";
+import {
+  createNamespace,
+  ensureDockerAvailable,
+  generateCryptoWithDocker,
+  listNamespaces,
+  runDockerCompose,
+  waitForTcpPort,
+} from "../../utils/dockerHelpers";
 import type { FabloEngine, ValidationResult } from "../engine";
 import schema = require("./schema/fabricx-schema-v1.json");
 
@@ -22,6 +29,14 @@ type FabricXNode = {
   wallets?: string[];
 };
 
+type FabricXOrganization = {
+  name: string;
+  mspId: string;
+  domain: string;
+  peerName?: string;
+  adminUser?: string;
+};
+
 type FabricXConfig = {
   $schema: string;
   global: {
@@ -29,83 +44,167 @@ type FabricXConfig = {
     tls?: boolean;
   };
   fabricx: {
-    channelId: string;
+    channelId?: string;
+    channel?: {
+      name: string;
+      profile?: string;
+      policy?: string;
+    };
     namespace: string;
     infrastructure: {
       image: string;
+      toolsImage?: string;
+      containerName?: string;
       ports?: Partial<FabricXPorts>;
     };
-    nodes: FabricXNode[];
+    organizations: FabricXOrganization[];
+    nodes?: FabricXNode[];
   };
 };
 
-function formatAjvErrors(errors: unknown): string[] {
-  if (!Array.isArray(errors)) return ["Invalid config."];
-  return errors.map((e: any) => {
-    const instancePath = e?.instancePath ?? "";
-    const message = e?.message ?? "is invalid";
-    return `${instancePath} ${message}`.trim();
-  });
-}
+type NormalizedFabricXOrganization = Required<FabricXOrganization>;
 
-async function waitForTcpPort(host: string, port: number, timeoutMs: number): Promise<void> {
-  const POLL_INTERVAL_MS = 1000;
-  const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const reachable = await new Promise<boolean>((resolve) => {
-      const socket = new net.Socket();
-      socket.setTimeout(POLL_INTERVAL_MS);
-      socket.once("connect", () => {
-        socket.destroy();
-        resolve(true);
-      });
-      const fail = () => {
-        socket.destroy();
-        resolve(false);
-      };
-      socket.once("error", fail);
-      socket.once("timeout", fail);
-      socket.connect(port, host);
-    });
+type FabricXEngineState = {
+  channelName: string;
+  containerName: string;
+  image: string;
+  namespace: string;
+  namespacePolicy: string;
+  ports: FabricXPorts;
+  profileName: string;
+  organizations: NormalizedFabricXOrganization[];
+  toolsImage: string;
+};
 
-    if (reachable) return;
-    if (Date.now() - start > timeoutMs) {
-      throw new Error(`Port ${host}:${port} did not become ready within ${Math.ceil(timeoutMs / 1000)}s.`);
-    }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-  }
-}
+const DEFAULT_PORTS: FabricXPorts = {
+  sidecar: 4001,
+  query: 7001,
+  orderer: 7050,
+  database: 5433,
+};
+
+const DEFAULT_COMMITTER_IMAGE = "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.9";
+const DEFAULT_TOOLS_IMAGE = "ghcr.io/hyperledger/fabric-x-tools:latest";
+const DEFAULT_CONTAINER_NAME = "committer";
+const DEFAULT_PROFILE_NAME = "OrgsChannel";
+const DEFAULT_PEER_NAME = "SC";
+const DEFAULT_ADMIN_USER = "channel_admin";
 
 function resolveTargetDir(targetDir?: string): string {
   return targetDir ?? path.join(process.cwd(), "fablo-target", "fabricx");
 }
 
-function resolveCryptoSourceDir(): string | undefined {
-  const envPath = process.env.FABLO_FABRICX_CRYPTO_SOURCE;
-  if (envPath) return path.resolve(envPath);
-
-  const candidates = [
-    path.join(process.cwd(), "..", "fabric-x-repo", "samples", "tokens", "crypto"),
-    path.join(process.cwd(), "fabric-x-repo", "samples", "tokens", "crypto"),
-  ].map((p) => path.resolve(p));
-
-  return candidates.find((p) => fs.existsSync(p));
+function formatJsonSchemaErrors(errors: unknown): string[] {
+  if (!Array.isArray(errors)) return ["Invalid config."];
+  return errors.map((error: any) => `${error?.property ?? ""} : ${error?.message ?? "is invalid"}`.trim());
 }
 
-type FabricXEngineState = {
-  ports: FabricXPorts;
-};
+function getChannelName(config: FabricXConfig): string {
+  return config.fabricx.channel?.name ?? config.fabricx.channelId ?? "mychannel";
+}
+
+function getProfileName(config: FabricXConfig): string {
+  return config.fabricx.channel?.profile ?? DEFAULT_PROFILE_NAME;
+}
+
+function getNamespacePolicy(config: FabricXConfig, organizations: NormalizedFabricXOrganization[]): string {
+  return config.fabricx.channel?.policy ?? `AND('${organizations[0].mspId}.member')`;
+}
+
+function getPorts(config: FabricXConfig): FabricXPorts {
+  const overridePorts = config.fabricx.infrastructure.ports ?? {};
+  return {
+    sidecar: overridePorts.sidecar ?? DEFAULT_PORTS.sidecar,
+    query: overridePorts.query ?? DEFAULT_PORTS.query,
+    orderer: overridePorts.orderer ?? DEFAULT_PORTS.orderer,
+    database: overridePorts.database ?? DEFAULT_PORTS.database,
+  };
+}
+
+function normalizeOrganizations(config: FabricXConfig): NormalizedFabricXOrganization[] {
+  return config.fabricx.organizations.map((organization) => ({
+    ...organization,
+    peerName: organization.peerName ?? DEFAULT_PEER_NAME,
+    adminUser: organization.adminUser ?? DEFAULT_ADMIN_USER,
+  }));
+}
+
+async function resolveSignCertPath(cryptoDir: string, organization: NormalizedFabricXOrganization): Promise<string> {
+  const signCertDir = path.join(
+    cryptoDir,
+    "peerOrganizations",
+    organization.domain,
+    "users",
+    `${organization.adminUser}@${organization.domain}`,
+    "msp",
+    "signcerts",
+  );
+
+  if (!(await fs.pathExists(signCertDir))) {
+    throw new Error(`Missing signcert directory: ${signCertDir}`);
+  }
+
+  const entries = await fs.readdir(signCertDir);
+  const pemFile = entries.find((entry) => entry.endsWith(".pem")) ?? entries[0];
+  if (!pemFile) {
+    throw new Error(`No signcert found in ${signCertDir}`);
+  }
+
+  return path.join(signCertDir, pemFile);
+}
+
+async function writeScPubKey(cryptoDir: string, organization: NormalizedFabricXOrganization): Promise<void> {
+  const source = await resolveSignCertPath(cryptoDir, organization);
+  const destination = path.join(cryptoDir, "sc_pubkey.pem");
+  await fs.copy(source, destination, { overwrite: true });
+}
+
+async function makeTreeReadable(targetPath: string): Promise<void> {
+  const stats = await fs.lstat(targetPath);
+  if (stats.isSymbolicLink()) {
+    return;
+  }
+
+  if (stats.isDirectory()) {
+    await fs.chmod(targetPath, 0o755);
+    const entries = await fs.readdir(targetPath);
+    for (const entry of entries) {
+      await makeTreeReadable(path.join(targetPath, entry));
+    }
+    return;
+  }
+
+  await fs.chmod(targetPath, 0o644);
+}
+
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number,
+  description: string,
+  intervalMs = 2000,
+): Promise<T> {
+  const startedAt = Date.now();
+  let lastError: Error | undefined;
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  throw new Error(`${description} failed: ${lastError?.message ?? "timed out"}`);
+}
 
 export class FabricXEngine implements FabloEngine {
-  private ajv = new Ajv({ allErrors: true });
-
   validate(rawConfig: unknown): ValidationResult {
-    const validate = this.ajv.compile(schema as any);
-    const valid = validate(rawConfig);
+    const validator = new SchemaValidator();
+    const results = validator.validate(rawConfig as any, schema as any);
     return {
-      valid: !!valid,
-      errors: valid ? [] : formatAjvErrors(validate.errors),
+      valid: results.errors.length === 0,
+      errors: formatJsonSchemaErrors(results.errors),
     };
   }
 
@@ -115,108 +214,189 @@ export class FabricXEngine implements FabloEngine {
       throw new Error(`Fabric-X config validation failed:\n- ${validation.errors.join("\n- ")}`);
     }
 
-    const DEFAULT_PORTS: FabricXPorts = {
-      sidecar: 4001,
-      query: 7001,
-      orderer: 7050,
-      database: 5433,
-    };
+    if (config.global.tls) {
+      throw new Error("Fabric-X MVP currently supports only tls=false. This matches the FSC Fabric-X topology defaults.");
+    }
+
+    await ensureDockerAvailable();
+
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const templatesDir = path.join(__dirname, "templates");
-
-    const portsPartial = config.fabricx.infrastructure.ports ?? {};
-    const ports: FabricXPorts = {
-      sidecar: portsPartial.sidecar ?? DEFAULT_PORTS.sidecar,
-      query: portsPartial.query ?? DEFAULT_PORTS.query,
-      orderer: portsPartial.orderer ?? DEFAULT_PORTS.orderer,
-      database: portsPartial.database ?? DEFAULT_PORTS.database,
-    };
+    const configDir = path.join(effectiveTargetDir, "fxconfig");
+    const cryptoDir = path.join(effectiveTargetDir, "crypto");
+    const channelName = getChannelName(config);
+    const profileName = getProfileName(config);
+    const organizations = normalizeOrganizations(config);
+    const namespacePolicy = getNamespacePolicy(config, organizations);
+    const ports = getPorts(config);
+    const image = config.fabricx.infrastructure.image || DEFAULT_COMMITTER_IMAGE;
+    const toolsImage = config.fabricx.infrastructure.toolsImage || DEFAULT_TOOLS_IMAGE;
+    const containerName = config.fabricx.infrastructure.containerName || DEFAULT_CONTAINER_NAME;
 
     await fs.ensureDir(effectiveTargetDir);
-    await fs.ensureDir(path.join(effectiveTargetDir, "conf"));
+    await fs.ensureDir(configDir);
 
-    const statePath = path.join(effectiveTargetDir, "fabricx-engine-state.json");
-    const state: FabricXEngineState = { ports };
-    await fs.writeJSON(statePath, state, { spaces: 2 });
-
-    const cryptoSourceDir = resolveCryptoSourceDir();
-    const cryptoTargetDir = path.join(effectiveTargetDir, "crypto");
-    if (cryptoSourceDir) {
-      await fs.copy(cryptoSourceDir, cryptoTargetDir, { overwrite: true });
-    } else {
-      await fs.ensureDir(cryptoTargetDir);
-      console.warn(
-        "[fablo] WARNING: No crypto material found. Set FABLO_FABRICX_CRYPTO_SOURCE to a valid directory.\n" +
-          "The network will start but cannot process transactions without certificates.\n" +
-          "Checked: FABLO_FABRICX_CRYPTO_SOURCE env var, and default relative paths.",
-      );
-    }
-
-    const dockerComposeTemplate = path.join(templatesDir, "docker-compose.xdev.yaml.ejs");
-    const dockerComposeDest = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
-    await renderTemplate(dockerComposeTemplate, dockerComposeDest, {
-      image: config.fabricx.infrastructure.image,
+    await renderTemplate(path.join(templatesDir, "crypto-config.yaml.ejs"), path.join(configDir, "crypto-config.yaml"), {
+      organizations,
+    });
+    await renderTemplate(path.join(templatesDir, "configtx.yaml.ejs"), path.join(configDir, "configtx.yaml"), {
+      organizations,
+      namespacePolicy,
       ports,
-      channelId: config.fabricx.channelId,
-      containerName: "committer",
-      networkName: "fabricx",
-      ordererIdentityMspId: process.env.FABLO_FABRICX_ORDERER_MSP_ID ?? "Org1MSP",
-      ordererIdentityMspDir:
-        process.env.FABLO_FABRICX_ORDERER_MSP_DIR_REL ?? "peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp",
+      profileName,
     });
 
-    const routingConfigTemplate = path.join(templatesDir, "routing-config.yaml.ejs");
-    const routingConfigDest = path.join(effectiveTargetDir, "conf", "routing-config.yaml");
-    await renderTemplate(routingConfigTemplate, routingConfigDest, {
-      nodes: config.fabricx.nodes,
+    await generateCryptoWithDocker({
+      channelName,
+      configDir,
+      cryptoTargetDir: cryptoDir,
+      profileName,
+      toolsImage,
     });
 
-    const coreTemplate = path.join(templatesDir, "core.yaml.ejs");
-    for (const node of config.fabricx.nodes) {
-      const nodeConfDir = path.join(effectiveTargetDir, "conf", node.id);
-      const coreDest = path.join(nodeConfDir, "core.yaml");
-      await renderTemplate(coreTemplate, coreDest, {
-        node,
-        nodes: config.fabricx.nodes,
-        channelId: config.fabricx.channelId,
-        namespace: config.fabricx.namespace,
+    await makeTreeReadable(cryptoDir);
+    await writeScPubKey(cryptoDir, organizations[0]);
+
+    const sidecarPeerMspDir = path.posix.join(
+      "/root/artifacts/crypto",
+      "peerOrganizations",
+      organizations[0].domain,
+      "peers",
+      `${organizations[0].peerName}.${organizations[0].domain}`,
+      "msp",
+    );
+
+    await renderTemplate(
+      path.join(templatesDir, "docker-compose.xdev.yaml.ejs"),
+      path.join(effectiveTargetDir, "docker-compose.xdev.yaml"),
+      {
+        addLinuxHostGateway: os.platform() === "linux",
+        channelName,
+        containerName,
+        image,
         ports,
-        tls: config.global.tls ?? false,
-      });
-    }
+        sidecarMspId: organizations[0].mspId,
+        sidecarPeerMspDir,
+      },
+    );
+
+    const state: FabricXEngineState = {
+      channelName,
+      containerName,
+      image,
+      namespace: config.fabricx.namespace,
+      namespacePolicy,
+      ports,
+      profileName,
+      organizations,
+      toolsImage,
+    };
+
+    await fs.writeJSON(path.join(effectiveTargetDir, "fabricx-engine-state.json"), state, { spaces: 2 });
+
+    console.log(`\n✅ Fabric-X artifacts generated in ${effectiveTargetDir}`);
+    console.log(`📁 Crypto material: ${cryptoDir}`);
+    console.log(`📁 Fabric-X config: ${configDir}`);
   }
 
   async up(targetDir?: string): Promise<void> {
+    await ensureDockerAvailable();
+
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
     const statePath = path.join(effectiveTargetDir, "fabricx-engine-state.json");
+
     if (!(await fs.pathExists(composeFile)) || !(await fs.pathExists(statePath))) {
       throw new Error("Run 'fablo generate <config> <targetDir>' first.");
     }
 
-    execSync(`docker compose -f ${composeFile} up -d`, { stdio: "inherit" });
     const state = (await fs.readJSON(statePath)) as FabricXEngineState;
+    await runDockerCompose(composeFile, ["up", "-d", "--remove-orphans"]);
 
-    await waitForTcpPort("127.0.0.1", state.ports.orderer, 60_000);
-    await waitForTcpPort("127.0.0.1", state.ports.query, 60_000);
+    await waitForTcpPort("127.0.0.1", state.ports.sidecar, 90_000);
+    await waitForTcpPort("127.0.0.1", state.ports.query, 90_000);
+
+    const approverOrg = state.organizations[0];
+    const namespaces = await retryOperation(
+      () =>
+        listNamespaces({
+          containerName: state.containerName,
+          cryptoTargetDir: path.join(effectiveTargetDir, "crypto"),
+          image: state.toolsImage,
+          queriesAddress: "127.0.0.1:7001",
+        }),
+      60_000,
+      "Query service readiness check",
+    );
+
+    if (namespaces.includes(state.namespace)) {
+      return;
+    }
+
+    await retryOperation(
+      () =>
+        createNamespace({
+          channelName: state.channelName,
+          containerName: state.containerName,
+          cryptoTargetDir: path.join(effectiveTargetDir, "crypto"),
+          image: state.toolsImage,
+          mspConfigPath: path.posix.join(
+            "/root/artifacts/crypto",
+            "peerOrganizations",
+            approverOrg.domain,
+            "users",
+            `${approverOrg.adminUser}@${approverOrg.domain}`,
+            "msp",
+          ),
+          mspId: approverOrg.mspId,
+          namespace: state.namespace,
+          notificationsAddress: "127.0.0.1:7001",
+          ordererAddress: "127.0.0.1:7050",
+          policy: state.namespacePolicy,
+          waitForCommit: false,
+        }),
+      90_000,
+      "Namespace bootstrap",
+    );
+
+    await retryOperation(
+      async () => {
+        const updatedNamespaces = await listNamespaces({
+          containerName: state.containerName,
+          cryptoTargetDir: path.join(effectiveTargetDir, "crypto"),
+          image: state.toolsImage,
+          queriesAddress: "127.0.0.1:7001",
+        });
+
+        if (!updatedNamespaces.includes(state.namespace)) {
+          throw new Error(`Namespace ${state.namespace} not visible yet`);
+        }
+      },
+      90_000,
+      "Namespace visibility check",
+    );
   }
 
   async down(targetDir?: string): Promise<void> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
+
     if (!(await fs.pathExists(composeFile))) {
       throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
     }
-    execSync(`docker compose -f ${composeFile} down`, { stdio: "inherit" });
+
+    await runDockerCompose(composeFile, ["down", "--remove-orphans"]);
   }
 
   async status(targetDir?: string): Promise<string> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
+
     if (!(await fs.pathExists(composeFile))) {
       throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
     }
-    const output = execSync(`docker compose -f ${composeFile} ps`, { stdio: "pipe" }).toString("utf-8");
-    return output.trimEnd();
+
+    const result = await runDockerCompose(composeFile, ["ps"], false);
+    return result.stdout.trimEnd();
   }
 }
