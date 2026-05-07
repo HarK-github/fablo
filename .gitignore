@@ -15,3 +15,11 @@ fablo-config.json
 group
 passwd
 fablo-config-fabricx.json
+# Fabric-X test artifacts
+e2e-network/__tmp__/
+fablo-target/
+fablo-config-fabricx.json
+
+# Old microservices artifacts (if any)
+**/services/
+**/input/
