@@ -85,7 +85,7 @@ const DEFAULT_PORTS: FabricXPorts = {
 
 const DEFAULT_COMMITTER_IMAGE = "ghcr.io/hyperledger/fabric-x-committer-test-node:0.1.9";
 const DEFAULT_TOOLS_IMAGE = "ghcr.io/hyperledger/fabric-x-tools:latest";
-const DEFAULT_CONTAINER_NAME = "committer";
+const DEFAULT_CONTAINER_NAME = "fabricx-infra";
 const DEFAULT_PROFILE_NAME = "OrgsChannel";
 const DEFAULT_PEER_NAME = "SC";
 const DEFAULT_ADMIN_USER = "channel_admin";
@@ -294,7 +294,7 @@ export class FabricXEngine implements FabloEngine {
 
     await fs.writeJSON(path.join(effectiveTargetDir, "fabricx-engine-state.json"), state, { spaces: 2 });
 
-    console.log(`\n✅ Fabric-X artifacts generated in ${effectiveTargetDir}`);
+    console.log(`\n✓ Fabric-X artifacts generated in ${effectiveTargetDir}`);
     console.log(`📁 Crypto material: ${cryptoDir}`);
     console.log(`📁 Fabric-X config: ${configDir}`);
   }
@@ -391,12 +391,54 @@ export class FabricXEngine implements FabloEngine {
   async status(targetDir?: string): Promise<string> {
     const effectiveTargetDir = resolveTargetDir(targetDir);
     const composeFile = path.join(effectiveTargetDir, "docker-compose.xdev.yaml");
+    const statePath = path.join(effectiveTargetDir, "fabricx-engine-state.json");
 
-    if (!(await fs.pathExists(composeFile))) {
-      throw new Error(`Missing ${composeFile}. Run 'fablo generate' first.`);
+    if (!(await fs.pathExists(composeFile)) || !(await fs.pathExists(statePath))) {
+      throw new Error("Run 'fablo generate <config> <targetDir>' first.");
     }
 
-    const result = await runDockerCompose(composeFile, ["ps"], false);
-    return result.stdout.trimEnd();
+    const state = (await fs.readJSON(statePath)) as FabricXEngineState;
+
+    // Quick port check (don't wait for 90s like in up, just try once)
+    const checkPort = async (port: number): Promise<boolean> => {
+      try {
+        await waitForTcpPort("127.0.0.1", port, 2000); // 2 second timeout
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const sidecarOk = await checkPort(state.ports.sidecar);
+    const queryOk = await checkPort(state.ports.query);
+    const ordererOk = await checkPort(state.ports.orderer);
+    const dbOk = await checkPort(state.ports.database);
+
+    // Check namespace visibility
+    let namespaceVisible = false;
+    try {
+      const namespaces = await listNamespaces({
+        containerName: state.containerName,
+        cryptoTargetDir: path.join(effectiveTargetDir, "crypto"),
+        image: state.toolsImage,
+        queriesAddress: "127.0.0.1:7001",
+      });
+      namespaceVisible = namespaces.includes(state.namespace);
+    } catch {
+      // namespace check failed – leave it as false
+    }
+
+    const tick = (ok: boolean) => (ok ? "✓" : "✗");
+    const lines = [
+      `\n[fabric-x] Network: ${state.channelName}`,
+      `  Container: ${state.containerName}`,
+      `  Sidecar      :${state.ports.sidecar}   ${tick(sidecarOk)} reachable`,
+      `  Query         :${state.ports.query}   ${tick(queryOk)} reachable`,
+      `  Orderer       :${state.ports.orderer}   ${tick(ordererOk)} reachable`,
+      `  PostgreSQL    :${state.ports.database}   ${tick(dbOk)} reachable`,
+      `  Namespace: ${state.namespace}   ${tick(namespaceVisible)} visible`,
+    ];
+
+    return lines.join("\n");
   }
 }

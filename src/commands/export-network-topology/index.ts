@@ -41,7 +41,7 @@ export default class ExportNetworkTopology extends Command {
         fs.mkdirSync(outputDir, { recursive: true });
       }
       fs.writeFileSync(this.outputFile, mermaidDiagram);
-      this.log(`✅ Network topology exported to ${this.outputFile}`);
+      this.log(`✓ Network topology exported to ${this.outputFile}`);
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";

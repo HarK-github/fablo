@@ -67,7 +67,7 @@ export default class SetupK8s extends Command {
     const mermaidDiagram = generateMermaidDiagram(configExtended);
     await fs.ensureDir(path.dirname(outputFile));
     await fs.writeFile(outputFile, mermaidDiagram, "utf-8");
-    this.log(`✅ Network topology exported to ${outputFile}`);
+    this.log(`✓ Network topology exported to ${outputFile}`);
 
     this.log("Done & done !!! Try the network out: ");
     this.log("-> fablo up - to start network");

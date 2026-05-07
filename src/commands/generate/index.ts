@@ -42,6 +42,6 @@ export default class Generate extends Command {
       : defaultTargetDir;
 
     await engine.generate(config, targetDir);
-    this.log(`✅ Generated into ${targetDir}`);
+    this.log(`✓ Generated into ${targetDir}`);
   }
 }
