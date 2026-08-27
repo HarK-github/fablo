@@ -70,7 +70,11 @@ networkUp() {
            "$FABRIC_X_ROOT/data/committer-org1/sidecar-ledger" \
            "$FABRIC_X_ROOT/data/committer-org1/db"
   generateArtifacts
-  (cd "$FABRIC_X_ROOT" && docker compose up -d --wait)
+  # cryptogen writes private keys with mode 600. Run the services as the same
+  # host user that owns those files instead of relying on Compose's 1000:1000
+  # fallback, which is a different UID on many CI runners.
+  FABRIC_X_UID="$(id -u)" FABRIC_X_GID="$(id -g)" \
+    docker compose --project-directory "$FABRIC_X_ROOT" up -d --wait
   printStartSuccessInfo
 }
 
