@@ -74,7 +74,7 @@ networkUp() {
            "$FABRIC_X_ROOT/data/committer-org1/sidecar-ledger"
 
   echo "Fixing permissions on data directories so container internal users can write to host bind mounts..."
-  chmod -R 777 "$FABRIC_X_ROOT/data"
+  chmod -R 777 "$FABRIC_X_ROOT/data" || true
 
   generateArtifacts
   # cryptogen writes private keys with mode 600. Run the services as the same
