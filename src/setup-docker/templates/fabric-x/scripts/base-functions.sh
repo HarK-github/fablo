@@ -67,11 +67,16 @@ generateArtifacts() {
 }
 networkUp() {
   mkdir -p "$FABRIC_X_ROOT/data/orderers/party1-router" \
-           "$FABRIC_X_ROOT/data/orderers/party1-batcher" \
            "$FABRIC_X_ROOT/data/orderers/party1-consenter" \
            "$FABRIC_X_ROOT/data/orderers/party1-assembler" \
-           "$FABRIC_X_ROOT/data/committer-org1/sidecar-ledger" \
-           "$FABRIC_X_ROOT/data/committer-org1/db"
+           "$FABRIC_X_ROOT/data/orderers/party1-batcher" \
+           "$FABRIC_X_ROOT/data/committer-org1/db" \
+           "$FABRIC_X_ROOT/data/committer-org1/vc" \
+           "$FABRIC_X_ROOT/data/committer-org1/verifier"
+
+  echo "Fixing permissions on data directories so container internal users can write to host bind mounts..."
+  chmod -R 777 "$FABRIC_X_ROOT/data"
+
   generateArtifacts
   # cryptogen writes private keys with mode 600. Run the services as the same
   # host user that owns those files instead of relying on Compose's 1000:1000
