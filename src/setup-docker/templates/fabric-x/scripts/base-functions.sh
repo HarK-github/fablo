@@ -71,8 +71,7 @@ networkUp() {
            "$FABRIC_X_ROOT/data/orderers/party1-assembler" \
            "$FABRIC_X_ROOT/data/orderers/party1-batcher" \
            "$FABRIC_X_ROOT/data/committer-org1/db" \
-           "$FABRIC_X_ROOT/data/committer-org1/vc" \
-           "$FABRIC_X_ROOT/data/committer-org1/verifier"
+           "$FABRIC_X_ROOT/data/committer-org1/sidecar-ledger"
 
   echo "Fixing permissions on data directories so container internal users can write to host bind mounts..."
   chmod -R 777 "$FABRIC_X_ROOT/data"
