@@ -112,7 +112,21 @@ fi
 
 echo "5. Cache / Up Skip"
 CONFIG_MTIME_BEFORE=$(stat -c %Y "$CONFIG_BLOCK")
-run_fablo up
+# Retry 'up' a few times to handle slow DB initialization on CI runners
+UP_SUCCESS=false
+for i in {1..3}; do
+  if run_fablo up; then
+    UP_SUCCESS=true
+    break
+  fi
+  echo "fablo up failed (attempt $i). Retrying in 10s..."
+  sleep 10
+done
+
+if [ "$UP_SUCCESS" = false ]; then
+  echo "Error: fablo up failed after 3 attempts."
+  exit 1
+fi
 CONFIG_MTIME_AFTER=$(stat -c %Y "$CONFIG_BLOCK")
 if [ "$CONFIG_MTIME_BEFORE" != "$CONFIG_MTIME_AFTER" ]; then
   echo "Error: Artifacts were regenerated during a cached 'up' command."
