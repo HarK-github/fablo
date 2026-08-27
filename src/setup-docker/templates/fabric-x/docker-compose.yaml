@@ -17,6 +17,7 @@ services:
     image: ghcr.io/hyperledger/fabric-x-orderer:1.0.0
     pull_policy: missing
     restart: unless-stopped
+    user: "${FABRIC_X_UID:-1000}:${FABRIC_X_GID:-1000}"
     command: router --config=/config/node_config.yaml
     ports:
       - "7050:7050"
@@ -45,6 +46,7 @@ services:
     image: ghcr.io/hyperledger/fabric-x-orderer:1.0.0
     pull_policy: missing
     restart: unless-stopped
+    user: "${FABRIC_X_UID:-1000}:${FABRIC_X_GID:-1000}"
     command: batcher --config=/config/node_config.yaml
     ports:
       - "7051:7051"
@@ -72,6 +74,7 @@ services:
     image: ghcr.io/hyperledger/fabric-x-orderer:1.0.0
     pull_policy: missing
     restart: unless-stopped
+    user: "${FABRIC_X_UID:-1000}:${FABRIC_X_GID:-1000}"
     command: consensus --config=/config/node_config.yaml
     ports:
       - "7052:7052"
@@ -96,6 +99,7 @@ services:
     image: ghcr.io/hyperledger/fabric-x-orderer:1.0.0
     pull_policy: missing
     restart: unless-stopped
+    user: "${FABRIC_X_UID:-1000}:${FABRIC_X_GID:-1000}"
     command: assembler --config=/config/node_config.yaml
     ports:
       - "7053:7053"
@@ -211,6 +215,7 @@ services:
     image: ghcr.io/hyperledger/fabric-x-committer:1.0.3
     pull_policy: missing
     restart: unless-stopped
+    user: "${FABRIC_X_UID:-1000}:${FABRIC_X_GID:-1000}"
     command: start sidecar --config=/config/sidecar.yaml
     ports:
       - "4001:4001"
