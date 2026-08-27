@@ -6,6 +6,9 @@ networks:
     name: fabric-x
     driver: bridge
 
+volumes:
+  committer-org1-db-data:
+
 services:
 
   # ─── Orderer Party 1 ───────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ services:
       POSTGRES_PASSWORD: fabricx
       PGDATA: /var/lib/postgresql/data
     volumes:
-      - ./data/committer-org1/db:/var/lib/postgresql/data:Z
+      - committer-org1-db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fabricx -d fabricx"]
       interval: 5s
