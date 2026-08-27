@@ -57,9 +57,13 @@ for i in {1..5}; do
     UP_SUCCESS=true
     break
   fi
-  echo "fablo up failed (attempt $i). Cleaning and retrying in 10s..."
-  run_fablo down || true
-  sleep 10
+  if [ "$i" -lt 5 ]; then
+    echo "fablo up failed (attempt $i). Cleaning and retrying in 10s..."
+    run_fablo down || true
+    sleep 10
+  else
+    echo "fablo up failed (attempt $i). Final attempt failed."
+  fi
 done
 
 if [ "$UP_SUCCESS" = false ]; then

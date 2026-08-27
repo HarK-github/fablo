@@ -76,7 +76,10 @@ networkUp() {
 
 networkDown() {
   (cd "$FABRIC_X_ROOT" && docker compose down -v)
-  rm -rf "$FABRIC_X_ROOT/crypto" "$FABRIC_X_ROOT/data"
+  # Some containers (like Postgres) may change data dir ownership to their internal user (e.g. 999), 
+  # making rm -rf fail for the CI runner user. Use docker to clean up if needed.
+  rm -rf "$FABRIC_X_ROOT/crypto" "$FABRIC_X_ROOT/data" 2>/dev/null || \
+    docker run --rm -v "$FABRIC_X_ROOT:/tmp/fx" alpine rm -rf /tmp/fx/crypto /tmp/fx/data
 }
 
 
