@@ -36,7 +36,21 @@ echo "Starting Fabric-X Network Initialization..."
 (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" validate)
 
 # Generate artifacts and spin up Docker containers
-(cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" up)
+# Retry 'up' a few times to handle slow DB initialization on CI runners
+UP_SUCCESS=false
+for i in {1..3}; do
+  if (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" up); then
+    UP_SUCCESS=true
+    break
+  fi
+  echo "fablo up failed (attempt $i). Retrying in 10s..."
+  sleep 10
+done
+
+if [ "$UP_SUCCESS" = false ]; then
+  echo "Error: fablo up failed after 3 attempts."
+  exit 1
+fi
 
 echo "Network started successfully."
 
