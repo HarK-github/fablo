@@ -124,6 +124,7 @@ services:
 
   committer-org1-db:
     image: docker.io/library/postgres:18.3-alpine3.23
+    command: postgres -c max_connections=500
     pull_policy: missing
     restart: unless-stopped
     environment:
