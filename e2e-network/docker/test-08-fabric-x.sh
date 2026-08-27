@@ -1,82 +1,88 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
+set -x # Enable verbose tracing in CI to pinpoint exact failing lines
 
 # Test Harness & Workspace Scaffolding
-
 TEST_TMP="$(rm -rf "$0.tmpdir" && mkdir -p "$0.tmpdir" && (cd "$0.tmpdir" && pwd))"
 TEST_LOGS="$(mkdir -p "$0.logs" && (cd "$0.logs" && pwd))"
 FABLO_HOME="$TEST_TMP/../../.."
-
 export FABLO_HOME
 
 dumpLogs() {
   echo "Saving logs of $1 to $TEST_LOGS/$1.log"
   mkdir -p "$TEST_LOGS"
-  docker logs "$1" >"$TEST_LOGS/$1.log" 2>&1
+  docker logs "$1" >"$TEST_LOGS/$1.log" 2>&1 || true
 }
 
 networkDown() {
-  docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}' | while read -r name; do
-    dumpLogs "$name"
+  local exit_code=$?
+  set +e
+  echo "Executing teardown. Capturing container logs..."
+  docker ps -a --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}' | while read -r name; do
+    [ -n "$name" ] && dumpLogs "$name"
   done
-  ( cd "$TEST_TMP" || exit 1; "$FABLO_HOME/fablo.sh" down || true )
+  ( cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" down ) || true
+  
+  if [ $exit_code -ne 0 ]; then
+    echo "❌ Test failed with exit code $exit_code"
+  fi
+  exit $exit_code
 }
 
-trap networkDown EXIT
-trap 'networkDown ; echo "Test failed" ; exit 1' ERR SIGINT
+trap networkDown EXIT SIGINT
 
 echo "Starting Fabric-X Network Initialization..."
 "$FABLO_HOME/fablo-build.sh"
 
-# Scaffold the network profile
 (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" init fabric-x)
-
-# Validate the generated profile
 (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" validate)
 
-# Generate artifacts and spin up Docker containers
-# Retry 'up' a few times to handle slow DB initialization on CI runners
+# Helper function to run Fablo inside temp directory
+run_fablo() {
+  (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" "$@")
+}
+
+# Spin up Docker containers with retry loop
 UP_SUCCESS=false
-for i in {1..3}; do
-  if (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" up); then
+for i in {1..5}; do
+  if run_fablo up; then
     UP_SUCCESS=true
     break
   fi
-  echo "fablo up failed (attempt $i). Retrying in 10s..."
+  echo "fablo up failed (attempt $i). Cleaning and retrying in 10s..."
+  run_fablo down || true
   sleep 10
 done
 
 if [ "$UP_SUCCESS" = false ]; then
-  echo "Error: fablo up failed after 3 attempts."
+  echo "Error: fablo up failed after 5 attempts."
   exit 1
 fi
 
 echo "Network started successfully."
 
-# Artifact Verification & Container Health Checks
+# Artifact Verification
 echo "Running Artifact Verification..."
-
 assert_non_empty() {
   local file="$1"
   if [ -z "$file" ] || [ ! -s "$file" ]; then
-    echo "Error: Artifact missing or empty."
+    echo "Error: Artifact missing or empty: $file"
     exit 1
   fi
   echo "Verified artifact exists and is non-empty: $file"
 }
 
-# Locate generated Fabric-X artifacts
-CONFIG_BLOCK=$(find "$TEST_TMP/fablo-target" -name "config-block.pb.bin" | head -n 1)
-SHARED_CONFIG=$(find "$TEST_TMP/fablo-target" -name "shared_config.binpb" | head -n 1)
-CLIENT_TLS=$(find "$TEST_TMP/fablo-target" -name "client-tls-ca.pem" | head -n 1)
+CONFIG_BLOCK=$(find "$TEST_TMP/fablo-target" -name "config-block.pb.bin" | head -n 1 || true)
+SHARED_CONFIG=$(find "$TEST_TMP/fablo-target" -name "shared_config.binpb" | head -n 1 || true)
+CLIENT_TLS=$(find "$TEST_TMP/fablo-target" -name "client-tls-ca.pem" | head -n 1 || true)
 
 assert_non_empty "$CONFIG_BLOCK"
 assert_non_empty "$SHARED_CONFIG"
 assert_non_empty "$CLIENT_TLS"
 
+# Container Health Checks
 echo "Running Container Health Checks..."
-# Verify containers belong strictly to the Fabric-X project to avoid false positives
 RUNNING_CONTAINERS=$(docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}')
 
 if ! echo "$RUNNING_CONTAINERS" | grep -q "orderer"; then
@@ -94,10 +100,6 @@ echo "All required Fabric-X containers are running."
 # Namespace & Lifecycle Regression Validation
 echo "Running Namespace & Lifecycle Regression Validation..."
 
-run_fablo() {
-  (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" "$@")
-}
-
 echo "1. Zero State"
 NS_LIST=$(run_fablo namespace list 2>&1 || true)
 if echo "$NS_LIST" | grep -q "mynamespace"; then
@@ -109,7 +111,7 @@ echo "2. Commit State"
 run_fablo namespace init
 
 echo "3. Post-Init Query"
-NS_LIST=$(run_fablo namespace list 2>&1)
+NS_LIST=$(run_fablo namespace list 2>&1 || true)
 if ! echo "$NS_LIST" | grep -q "mynamespace"; then
   echo "Error: mynamespace not found after init. Output: $NS_LIST"
   exit 1
@@ -117,7 +119,7 @@ fi
 
 echo "4. Idempotency"
 run_fablo namespace init
-NS_LIST_IDEMPOTENT=$(run_fablo namespace list 2>&1)
+NS_LIST_IDEMPOTENT=$(run_fablo namespace list 2>&1 || true)
 MYNAMESPACE_COUNT=$(echo "$NS_LIST_IDEMPOTENT" | grep -c "mynamespace" || true)
 if [ "$MYNAMESPACE_COUNT" -ne 1 ]; then
   echo "Error: Expected exactly 1 mynamespace after idempotent init, found $MYNAMESPACE_COUNT"
@@ -126,7 +128,7 @@ fi
 
 echo "5. Cache / Up Skip"
 CONFIG_MTIME_BEFORE=$(stat -c %Y "$CONFIG_BLOCK")
-# Retry 'up' a few times to handle slow DB initialization on CI runners
+
 UP_SUCCESS=false
 for i in {1..3}; do
   if run_fablo up; then
@@ -138,9 +140,10 @@ for i in {1..3}; do
 done
 
 if [ "$UP_SUCCESS" = false ]; then
-  echo "Error: fablo up failed after 3 attempts."
+  echo "Error: fablo up failed after cached up attempts."
   exit 1
 fi
+
 CONFIG_MTIME_AFTER=$(stat -c %Y "$CONFIG_BLOCK")
 if [ "$CONFIG_MTIME_BEFORE" != "$CONFIG_MTIME_AFTER" ]; then
   echo "Error: Artifacts were regenerated during a cached 'up' command."
@@ -150,7 +153,7 @@ fi
 echo "6. Stop / Start"
 run_fablo stop
 run_fablo start
-NS_LIST=$(run_fablo namespace list 2>&1)
+NS_LIST=$(run_fablo namespace list 2>&1 || true)
 if ! echo "$NS_LIST" | grep -q "mynamespace"; then
   echo "Error: mynamespace not found after stop/start. Output: $NS_LIST"
   exit 1
@@ -158,8 +161,6 @@ fi
 
 echo "7. Reset State"
 run_fablo reset
-# After reset, it might error if the target is deleted, or return an empty list.
-# We just want to ensure it doesn't show 'mynamespace' anymore.
 NS_LIST_RESET=$(run_fablo namespace list 2>&1 || true)
 if echo "$NS_LIST_RESET" | grep -q "mynamespace"; then
   echo "Error: mynamespace should be gone after reset."
