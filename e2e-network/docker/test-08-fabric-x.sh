@@ -17,7 +17,7 @@ dumpLogs() {
 }
 
 networkDown() {
-  (for name in $(docker ps --format '{{.Names}}'); do dumpLogs "$name"; done)
+  (for name in $(docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}'); do dumpLogs "$name"; done)
   (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" down || true)
 }
 
@@ -43,7 +43,7 @@ echo "Running Artifact Verification..."
 
 assert_non_empty() {
   local file="$1"
-  if [ -z "$file" ] || [ ! -s "$file" ]; then
+  if [ ! -s "$file" ]; then
     echo "Error: Artifact missing or empty."
     exit 1
   fi
@@ -60,17 +60,16 @@ assert_non_empty "$SHARED_CONFIG"
 assert_non_empty "$CLIENT_TLS"
 
 echo "Running Container Health Checks..."
-# Check that containers for this project are running
-# Typically fablo networks use a common label or prefix. Here we verify that at least some orderer/peer components are up.
-RUNNING_CONTAINERS=$(docker ps --format '{{.Names}}')
+# Verify containers belong strictly to the Fabric-X project to avoid false positives
+RUNNING_CONTAINERS=$(docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}')
 
 if ! echo "$RUNNING_CONTAINERS" | grep -q "orderer"; then
-  echo "Error: No orderer containers found running."
+  echo "Error: No orderer containers found running for the Fabric-X project."
   exit 1
 fi
 
-if ! echo "$RUNNING_CONTAINERS" | grep -q "peer\|committer"; then
-  echo "Error: No peer/committer containers found running."
+if ! echo "$RUNNING_CONTAINERS" | grep -q "committer"; then
+  echo "Error: No committer containers found running for the Fabric-X project."
   exit 1
 fi
 
@@ -102,9 +101,21 @@ fi
 
 echo "4. Idempotency"
 run_fablo namespace init
+NS_LIST_IDEMPOTENT=$(run_fablo namespace list 2>&1)
+MYNAMESPACE_COUNT=$(echo "$NS_LIST_IDEMPOTENT" | grep -c "mynamespace" || true)
+if [ "$MYNAMESPACE_COUNT" -ne 1 ]; then
+  echo "Error: Expected exactly 1 mynamespace after idempotent init, found $MYNAMESPACE_COUNT"
+  exit 1
+fi
 
 echo "5. Cache / Up Skip"
+CONFIG_MTIME_BEFORE=$(stat -c %Y "$CONFIG_BLOCK")
 run_fablo up
+CONFIG_MTIME_AFTER=$(stat -c %Y "$CONFIG_BLOCK")
+if [ "$CONFIG_MTIME_BEFORE" != "$CONFIG_MTIME_AFTER" ]; then
+  echo "Error: Artifacts were regenerated during a cached 'up' command."
+  exit 1
+fi
 
 echo "6. Stop / Start"
 run_fablo stop
