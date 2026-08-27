@@ -17,8 +17,10 @@ dumpLogs() {
 }
 
 networkDown() {
-  (for name in $(docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}'); do dumpLogs "$name"; done)
-  (cd "$TEST_TMP" && "$FABLO_HOME/fablo.sh" down || true)
+  docker ps --filter "label=com.docker.compose.project=fabric-x" --format '{{.Names}}' | while read -r name; do
+    dumpLogs "$name"
+  done
+  ( cd "$TEST_TMP" || exit 1; "$FABLO_HOME/fablo.sh" down || true )
 }
 
 trap networkDown EXIT
@@ -43,7 +45,7 @@ echo "Running Artifact Verification..."
 
 assert_non_empty() {
   local file="$1"
-  if [ ! -s "$file" ]; then
+  if [ -z "$file" ] || [ ! -s "$file" ]; then
     echo "Error: Artifact missing or empty."
     exit 1
   fi
