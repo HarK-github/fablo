@@ -142,7 +142,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U fabricx -d fabricx"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
     networks:
       - fabric-x
 
