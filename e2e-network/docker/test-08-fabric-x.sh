@@ -26,6 +26,13 @@ networkDown() {
   
   if [ $exit_code -ne 0 ]; then
     echo "❌ Test failed with exit code $exit_code"
+    echo "--- DUMPING CONTAINER LOGS TO CONSOLE FOR DEBUGGING ---"
+    for log_file in "$TEST_LOGS"/*.log; do
+      [ -f "$log_file" ] || continue
+      echo ">>> LOGS FOR: $(basename "$log_file") <<<"
+      cat "$log_file"
+      echo "------------------------------------------------------"
+    done
   fi
   exit $exit_code
 }
