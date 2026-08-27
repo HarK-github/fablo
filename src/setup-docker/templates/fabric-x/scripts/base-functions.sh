@@ -61,6 +61,9 @@ generateArtifacts() {
     configtxgen --channelID mychannel --profile OrgsChannel \
     --outputBlock /config/crypto/config-block.pb.bin \
     --configPath /config
+
+  echo "Fixing permissions for crypto material to ensure containers can read TLS keys..."
+  chmod -R a+rX "$FABRIC_X_ROOT/crypto" || true
 }
 networkUp() {
   mkdir -p "$FABRIC_X_ROOT/data/orderers/party1-router" \
