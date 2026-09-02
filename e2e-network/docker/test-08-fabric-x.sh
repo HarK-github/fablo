@@ -8,6 +8,11 @@ FABLO_HOME="$TEST_TMP/../../.."
 export FABLO_HOME
 
 dumpLogs() {
+  echo ""
+  echo "========== LOGS FOR $1 =========="
+  docker logs "$1" 2>&1 | tail -n 50 || true
+  echo "================================="
+  echo ""
   echo "Saving logs of $1 to $TEST_LOGS/$1.log"
   mkdir -p "$TEST_LOGS"
   docker logs "$1" >"$TEST_LOGS/$1.log" 2>&1 || true
