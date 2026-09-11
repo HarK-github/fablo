@@ -73,8 +73,12 @@ export default class SetupDocker extends Command {
 
     // ======= Fabric-X =================================================================
     if (global.provider === "fabric-x") {
-      const fabricXWriter = new FabricXDockerWriter(this.templatesDir, this.outputDir, (msg) => this.log(msg));
-      await fabricXWriter.write(configExtended);
+      try {
+        const fabricXWriter = new FabricXDockerWriter(this.templatesDir, this.outputDir, (msg) => this.log(msg));
+        await fabricXWriter.write(configExtended);
+      } catch (err: any) {
+        this.error(err?.message ?? "Error generating Fabric-X network files");
+      }
 
       // ======= hooks ====================================================================
       await this._copyHooks(configExtended.hooks);
