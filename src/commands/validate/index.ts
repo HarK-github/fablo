@@ -538,7 +538,7 @@ export default class Validate extends Command {
     if (global.engine === "kubernetes") {
       this.emit(validationErrorType.ERROR, {
         category: validationCategories.GENERAL,
-        message: "fabric-x does not support the 'kubernetes' engine .Use 'docker'",
+        message: "fabric-x does not support the 'kubernetes' engine. Use 'docker'.",
       });
     }
 
@@ -556,19 +556,30 @@ export default class Validate extends Command {
       });
     }
 
-    if (global.tools?.explorer === true || orgs.some((o) => o.tools?.explorer === true)) {
+    if (global.tools?.explorer === true) {
       this.emit(validationErrorType.ERROR, {
         category: validationCategories.GENERAL,
         message: "Explorer is not supported for fabric-x.",
       });
     }
 
-    if (orgs.some((o) => o.tools?.fabloRest === true)) {
-      this.emit(validationErrorType.ERROR, {
-        category: validationCategories.GENERAL,
-        message: "Fablo REST is not supported for provider fabric-x.",
+    orgs
+      .filter((o) => o.tools?.explorer === true)
+      .forEach((o) => {
+        this.emit(validationErrorType.ERROR, {
+          category: validationCategories.ORGS,
+          message: `Explorer is not supported for org '${o.organization.name}' with provider fabric-x.`,
+        });
       });
-    }
+
+    orgs
+      .filter((o) => o.tools?.fabloRest === true)
+      .forEach((o) => {
+        this.emit(validationErrorType.ERROR, {
+          category: validationCategories.ORGS,
+          message: `Fablo REST is not supported for org '${o.organization.name}' with provider fabric-x.`,
+        });
+      });
 
     if (chaincodes.length > 0) {
       this.emit(validationErrorType.ERROR, {
@@ -580,9 +591,42 @@ export default class Validate extends Command {
     if (channels.length !== 1) {
       this.emit(validationErrorType.ERROR, {
         category: validationCategories.CHANNEL,
-        message: `fabric-x requires exactly one channel found ${channels.length}.`,
+        message: `fabric-x requires exactly one channel, found ${channels.length}.`,
       });
     }
+
+    const orgNames = orgs.map((o) => o.organization.name);
+    const isOrdererOrg = (o: OrgJson): boolean => (o.orderers?.length ?? 0) > 0;
+    const channelOrgNames = channels.flatMap((c) => c.orgs.map((o) => o.name));
+
+    channels.forEach((channel) => {
+      if (channel.orgs.length !== 1) {
+        this.emit(validationErrorType.ERROR, {
+          category: validationCategories.CHANNEL,
+          message: `fabric-x requires exactly one organization in channel '${channel.name}', found ${channel.orgs.length}.`,
+        });
+      }
+
+      channel.orgs.forEach((channelOrg) => {
+        if (!orgNames.includes(channelOrg.name)) {
+          this.emit(validationErrorType.ERROR, {
+            category: validationCategories.CHANNEL,
+            message: `Organization '${channelOrg.name}' in channel '${
+              channel.name
+            }' does not exist in 'orgs'. Available organizations: [${orgNames.join(", ")}].`,
+          });
+        }
+      });
+    });
+
+    orgs
+      .filter((o) => !isOrdererOrg(o) && !channelOrgNames.includes(o.organization.name))
+      .forEach((o) => {
+        this.emit(validationErrorType.WARN, {
+          category: validationCategories.ORGS,
+          message: `Organization '${o.organization.name}' is declared but not joined to any channel.`,
+        });
+      });
   }
   _validateExplorer(global: GlobalJson, orgs: OrgJson[]): void {
     if (global.tools?.explorer === true) {
