@@ -586,6 +586,29 @@ export default class Validate extends Command {
         message: `fabric-x requires exactly one channel found ${channels.length}.`,
       });
     }
+
+    const channel = channels[0];
+    const channelOrgs = channel?.orgs ?? [];
+    if (channelOrgs.length === 0) {
+      this.emit(validationErrorType.ERROR, {
+        category: validationCategories.CHANNEL,
+        message: `fabric-x requires at least one organization on channel '${channel?.name}'.`,
+      });
+    }
+
+    const topLevelOrgNames = orgs.map((o) => o.organization.name);
+    const unknownChannelOrgs = channelOrgs.map((o) => o.name).filter((name) => !topLevelOrgNames.includes(name));
+    if (unknownChannelOrgs.length > 0) {
+      this.emit(validationErrorType.ERROR, {
+        category: validationCategories.CHANNEL,
+        message: `Channel '${channel?.name}' references unknown org(s): ${unknownChannelOrgs.join(", ")}.`,
+      });
+    }
+
+    const validChannelMspIds = orgs
+      .filter((o) => channelOrgs.some((co) => co.name === o.organization.name))
+      .map((o) => o.organization.mspName ?? `${o.organization.name}MSP`);
+
     const classicOnlyImages: (keyof FabricImagesJson)[] = ["peer", "ca", "ccenv", "baseos", "javaenv", "nodeenv"];
 
     classicOnlyImages.forEach((key) => {
@@ -600,7 +623,7 @@ export default class Validate extends Command {
     const namespaceNames = new Set<string>();
     const validNamespaceId = /^[a-z0-9_]+$/;
     const maxNamespaceIdLength = 60;
-    const knownOrgNames = (channels[0]?.orgs ?? []).map((o) => o.name);
+    const knownOrgNames = channelOrgs.map((o) => o.name);
 
     const namespaces = networkConfig.namespaces ?? [];
     if (namespaces.length < 1) {
@@ -626,7 +649,7 @@ export default class Validate extends Command {
       }
       namespaceNames.add(namespace.name);
 
-      if (namespace.orgs && namespace.policy!== undefined) {
+      if (namespace.orgs && namespace.policy !== undefined) {
         this.emit(validationErrorType.ERROR, {
           category: validationCategories.GENERAL,
           message: `Namespace '${namespace.name}' defines both 'orgs' and 'policy'. Use only one.`,
@@ -646,6 +669,19 @@ export default class Validate extends Command {
           category: validationCategories.GENERAL,
           message: `Namespace '${namespace.name}' references unknown org(s): ${unknownOrgNames.join(", ")}.`,
         });
+      }
+
+      if (namespace.policy) {
+        const mspMatches = Array.from(namespace.policy.matchAll(/'([A-Za-z0-9]+)(?:\.[a-zA-Z]+)?'/g));
+        const unknownMspIds = mspMatches.map((m) => m[1]).filter((mspId) => !validChannelMspIds.includes(mspId));
+        if (unknownMspIds.length > 0) {
+          this.emit(validationErrorType.ERROR, {
+            category: validationCategories.GENERAL,
+            message: `Namespace '${namespace.name}' policy references unknown MSP(s): ${[
+              ...new Set(unknownMspIds),
+            ].join(", ")}.`,
+          });
+        }
       }
     });
   }

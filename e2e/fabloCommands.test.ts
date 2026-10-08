@@ -293,6 +293,43 @@ describe("validate", () => {
     expect(fabricXResult).toEqual(TestCommands.success());
     expect(fabricXResult.output).toContain("Validation warnings count: 0");
   });
+
+  it("should validate Fabric-X multi-org topology and reject unknown orgs or policy MSPs", () => {
+    // 1. Valid multi-org config with valid multi-org namespace policy
+    commands.fabloExec("init fabric-x");
+    const configPath = `${commands.workdir}/fablo-config.json`;
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8")) as FabloConfigJson;
+
+    config.orgs.push({
+      organization: { name: "Org2", domain: "org2.example.com", mspName: "Org2MSP" },
+      ca: { prefix: "ca", db: "sqlite" },
+      orderers: undefined,
+    });
+    config.channels[0].orgs.push({ name: "Org2", peers: [] });
+    config.namespaces = [{ name: "my_ns", policy: "AND('Org1MSP.member','Org2MSP.member')" }];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    const validResult = commands.fabloExec("validate", true);
+    expect(validResult).toEqual(TestCommands.success());
+    expect(validResult.output).toContain("Validation errors count: 0");
+
+    // 2. Reject channel organization not in top-level orgs
+    config.channels[0].orgs.push({ name: "MissingOrg", peers: [] });
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    const missingOrgResult = commands.fabloExec("validate", true);
+    expect(missingOrgResult).toEqual(TestCommands.failure());
+    expect(missingOrgResult.output).toContain("Channel 'mychannel' references unknown org(s): MissingOrg.");
+
+    // 3. Reject namespace policy referencing unknown MSP
+    config.channels[0].orgs.pop();
+    config.namespaces[0].policy = "AND('Org1MSP.member','UnknownMSP.member')";
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    const unknownMspResult = commands.fabloExec("validate", true);
+    expect(unknownMspResult).toEqual(TestCommands.failure());
+    expect(unknownMspResult.output).toContain("Namespace 'my_ns' policy references unknown MSP(s): UnknownMSP.");
+  });
 });
 
 describe("extend config", () => {
