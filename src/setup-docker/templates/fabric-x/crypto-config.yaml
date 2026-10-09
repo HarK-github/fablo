@@ -48,9 +48,9 @@ OrdererOrgs:
 
 
 PeerOrgs:
-
-  - Name: <%= fabricX.applicationOrg.name %>
-    Domain: <%= fabricX.applicationOrg.domain %>
+  # <%_ fabricX.applicationOrgs.forEach((appOrg) => { _%>
+  - Name: <%= appOrg.name %>
+    Domain: <%= appOrg.domain %>
     EnableNodeOUs: false
     CA:
       hostname: ca
@@ -67,7 +67,7 @@ PeerOrgs:
     Specs:
       - Hostname: committer-sidecar
         SANS:
-          - committer-<%= fabricX.applicationOrgSlug %>-sidecar
+          - committer-<%= appOrg.slug %>-sidecar
           - host.docker.internal
           - 0.0.0.0
           - localhost
@@ -75,7 +75,7 @@ PeerOrgs:
           - ::1
       - Hostname: committer-coordinator
         SANS:
-          - committer-<%= fabricX.applicationOrgSlug %>-coordinator
+          - committer-<%= appOrg.slug %>-coordinator
           - host.docker.internal
           - 0.0.0.0
           - localhost
@@ -83,7 +83,7 @@ PeerOrgs:
           - ::1
       - Hostname: committer-validator
         SANS:
-          - committer-<%= fabricX.applicationOrgSlug %>-validator
+          - committer-<%= appOrg.slug %>-validator
           - host.docker.internal
           - 0.0.0.0
           - localhost
@@ -91,7 +91,7 @@ PeerOrgs:
           - ::1
       - Hostname: committer-verifier
         SANS:
-          - committer-<%= fabricX.applicationOrgSlug %>-verifier
+          - committer-<%= appOrg.slug %>-verifier
           - host.docker.internal
           - 0.0.0.0
           - localhost
@@ -99,7 +99,7 @@ PeerOrgs:
           - ::1
       - Hostname: committer-query-service
         SANS:
-          - committer-<%= fabricX.applicationOrgSlug %>-query-service
+          - committer-<%= appOrg.slug %>-query-service
           - host.docker.internal
           - 0.0.0.0
           - localhost
@@ -119,4 +119,4 @@ PeerOrgs:
           - localhost
           - 127.0.0.1
           - ::1
-
+  # <%_ }); _%>

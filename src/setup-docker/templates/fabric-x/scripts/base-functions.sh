@@ -17,7 +17,7 @@ printStartSuccessInfo() {
 TOOLS_IMAGE="${TOOLS_IMAGE:-<%= global.toolsImage %>}"
 ORDERER_IMAGE="${ORDERER_IMAGE:-<%= global.ordererImage %>}"
 NETWORK="${NETWORK:-fabric-x}"
-DEFAULT_POLICY="AND('<%= fabricX.applicationOrg.mspName %>.member')"
+DEFAULT_POLICY="<%- fabricX.defaultPolicy %>"
 
 
 generateArtifacts() {
@@ -40,8 +40,7 @@ generateArtifacts() {
     -v "$FABRIC_X_ROOT:/config" \
     "$TOOLS_IMAGE" \
     sh -c 'cryptogen generate --config=/config/crypto-config.yaml --output=/config/crypto \
-      && cp /config/crypto/peerOrganizations/<%= fabricX.applicationOrg.domain %>/msp/tlscacerts/tlsca.<%= fabricX.applicationOrg.domain %>-cert.pem \
-            /config/crypto/client-tls-ca.pem'
+      && cat /config/crypto/peerOrganizations/*/msp/tlscacerts/*.pem > /config/crypto/client-tls-ca.pem'
 
   echo "Generating Fabric-X shared config proto..."
 
@@ -68,8 +67,10 @@ networkUp() {
   mkdir -p "$FABRIC_X_ROOT/data/orderers/party1-router" \
            "$FABRIC_X_ROOT/data/orderers/party1-consenter" \
            "$FABRIC_X_ROOT/data/orderers/party1-assembler" \
-           "$FABRIC_X_ROOT/data/orderers/party1-batcher" \
-           "$FABRIC_X_ROOT/data/committer-<%= fabricX.applicationOrgSlug %>/sidecar-ledger"
+           "$FABRIC_X_ROOT/data/orderers/party1-batcher"
+<% fabricX.applicationOrgs.forEach((appOrg) => { -%>
+  mkdir -p "$FABRIC_X_ROOT/data/committer-<%= appOrg.slug %>/sidecar-ledger"
+<% }); -%>
 
   generateArtifacts
   FABRIC_X_UID="$(id -u)" FABRIC_X_GID="$(id -g)" \
